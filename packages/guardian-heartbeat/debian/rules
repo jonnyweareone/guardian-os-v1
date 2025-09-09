@@ -1,0 +1,11 @@
+#!/usr/bin/make -f
+%:
+	dh $@
+
+override_dh_install:
+	dh_install
+	install -d debian/guardian-heartbeat/usr/local/bin
+	install -m 755 guardian-heartbeat debian/guardian-heartbeat/usr/local/bin/
+	install -d debian/guardian-heartbeat/lib/systemd/system
+	install -m 644 guardian-heartbeat.service debian/guardian-heartbeat/lib/systemd/system/
+	install -m 644 guardian-heartbeat.timer debian/guardian-heartbeat/lib/systemd/system/

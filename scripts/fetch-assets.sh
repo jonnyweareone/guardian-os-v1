@@ -7,18 +7,21 @@ echo "Fetching Guardian OS brand assets..."
 mkdir -p assets
 
 # Download assets with proper names
+echo "Downloading wallpaper..."
 curl -fL "https://gameguardian.ai/lovable-uploads/guardian-wallpaper-desktop.png" \
     -o assets/wallpaper.png || {
     echo "Failed to download wallpaper"
     exit 1
 }
 
+echo "Downloading dark logo..."
 curl -fL "https://gameguardian.ai/lovable-uploads/guardian-logo-shield-text-dark.png" \
     -o assets/logo-dark.png || {
     echo "Failed to download dark logo"
     exit 1
 }
 
+echo "Downloading transparent logo..."
 curl -fL "https://gameguardian.ai/lovable-uploads/guardian-logo2-transparent.png" \
     -o assets/logo-transparent.png || {
     echo "Failed to download transparent logo"

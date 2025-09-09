@@ -1,0 +1,87 @@
+#!/bin/bash
+set -euo pipefail
+
+# Load environment variables from supabase.env
+if [ -f /etc/guardian/supabase.env ]; then
+    # Source the file, handling the $GUARDIAN_API_BASE variable substitution
+    eval "$(grep -v '^#' /etc/guardian/supabase.env | sed 's/\$GUARDIAN_API_BASE/https:\/\/xzxjwuzwltoapifcyzww.supabase.co\/functions\/v1/g')"
+fi
+
+STATE_FILE="/var/lib/guardian/heartbeat.json"
+LOG_FILE="/var/log/guardian/heartbeat.log"
+
+# Create directories
+mkdir -p "$(dirname "$STATE_FILE")"
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Function to log messages
+log_message() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+}
+
+# Check for device JWT
+if [ -z "${GUARDIAN_DEVICE_JWT:-}" ]; then
+    log_message "No device JWT available - skipping heartbeat"
+    exit 0
+fi
+
+# Check for heartbeat URL
+if [ -z "${GUARDIAN_HEARTBEAT_URL:-}" ]; then
+    log_message "No heartbeat URL configured - skipping"
+    exit 0
+fi
+
+# Calculate config hash
+CONFIG_HASH=""
+if [ -f /etc/guardian/policy.json ]; then
+    CONFIG_HASH=$(sha256sum /etc/guardian/policy.json | cut -d' ' -f1)
+else
+    CONFIG_HASH="none"
+fi
+
+# Collect system state
+STATE=$(cat <<EOF
+{
+  "status": "online",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "uptime": $(cat /proc/uptime | cut -d' ' -f1),
+  "versions": {
+    "os": "Guardian Ubuntu 24.04",
+    "agent": "0.1.0"
+  },
+  "config_hash": "sha256:${CONFIG_HASH}",
+  "memory": {
+    "total": $(grep MemTotal /proc/meminfo | awk '{print $2}'),
+    "available": $(grep MemAvailable /proc/meminfo | awk '{print $2}' || echo "0")
+  },
+  "users": $(who | wc -l)
+}
+EOF
+)
+
+# Write local state
+echo "$STATE" > "$STATE_FILE"
+log_message "State written to $STATE_FILE"
+
+# Send heartbeat to backend (non-blocking with timeout)
+RESPONSE=$(timeout 10 curl -s -X POST "$GUARDIAN_HEARTBEAT_URL" \
+    -H "Authorization: Bearer $GUARDIAN_DEVICE_JWT" \
+    -H "Content-Type: application/json" \
+    -d "$STATE" 2>&1) || {
+    log_message "Heartbeat failed: curl error $?"
+    exit 0  # Don't fail the service
+}
+
+# Log response
+if [ -n "$RESPONSE" ]; then
+    log_message "Heartbeat response: ${RESPONSE:0:200}"
+    
+    # Check if policy changed
+    if echo "$RESPONSE" | grep -q '"changed":true'; then
+        log_message "Policy update detected"
+        # Could trigger policy sync here
+    fi
+fi
+
+log_message "Heartbeat completed successfully"
+exit 0

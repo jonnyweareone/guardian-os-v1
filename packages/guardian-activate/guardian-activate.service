@@ -1,0 +1,15 @@
+[Unit]
+Description=Guardian Offline Activation Service
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/guardian/pending_activation.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/guardian-activate
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

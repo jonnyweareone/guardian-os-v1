@@ -1,0 +1,39 @@
+# Guardian OS GNOME Settings
+
+[org/gnome/desktop/interface]
+gtk-theme='Adwaita'
+icon-theme='Adwaita'
+cursor-theme='Adwaita'
+font-name='Ubuntu 11'
+document-font-name='Ubuntu 11'
+monospace-font-name='Ubuntu Mono 13'
+
+[org/gnome/desktop/background]
+picture-uri='file:///usr/share/backgrounds/guardian/wallpaper.png'
+picture-uri-dark='file:///usr/share/backgrounds/guardian/wallpaper.png'
+picture-options='zoom'
+primary-color='#2e3440'
+secondary-color='#2e3440'
+
+[org/gnome/desktop/screensaver]
+picture-uri='file:///usr/share/backgrounds/guardian/wallpaper.png'
+picture-options='zoom'
+primary-color='#2e3440'
+secondary-color='#2e3440'
+
+[org/gnome/shell]
+favorite-apps=['google-chrome.desktop', 'libreoffice-writer.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Settings.desktop']
+enabled-extensions=['ubuntu-dock@ubuntu.com']
+
+[org/gnome/shell/extensions/dash-to-dock]
+dock-position='LEFT'
+dock-fixed=true
+dash-max-icon-size=48
+show-trash=false
+show-mounts=false
+
+[org/gnome/desktop/session]
+idle-delay=uint32 900
+
+[org/gnome/desktop/privacy]
+report-technical-problems=false

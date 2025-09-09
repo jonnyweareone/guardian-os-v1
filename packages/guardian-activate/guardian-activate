@@ -1,0 +1,77 @@
+#!/bin/bash
+set -euo pipefail
+
+LOG_FILE="/var/log/guardian/activate.log"
+PENDING_FILE="/etc/guardian/pending_activation.json"
+MAX_RETRIES=5
+RETRY_DELAY=60
+
+# Create log directory
+mkdir -p "$(dirname "$LOG_FILE")"
+
+log_message() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Check if activation is needed
+if [ ! -f "$PENDING_FILE" ]; then
+    log_message "No pending activation found"
+    exit 0
+fi
+
+# Load environment
+if [ -f /etc/guardian/supabase.env ]; then
+    eval "$(grep -v '^#' /etc/guardian/supabase.env | sed 's/\$GUARDIAN_API_BASE/https:\/\/xzxjwuzwltoapifcyzww.supabase.co\/functions\/v1/g')"
+fi
+
+# Read pending activation data
+EMAIL=$(jq -r '.email' "$PENDING_FILE")
+FINGERPRINT=$(jq -r '.fingerprint' "$PENDING_FILE")
+
+if [ -z "$EMAIL" ] || [ -z "$FINGERPRINT" ]; then
+    log_message "Invalid pending activation data"
+    exit 1
+fi
+
+log_message "Attempting to activate device for $EMAIL"
+
+# Retry loop
+for attempt in $(seq 1 $MAX_RETRIES); do
+    log_message "Activation attempt $attempt of $MAX_RETRIES"
+    
+    # First, try to authenticate
+    # Note: In production, this would need stored credentials or user interaction
+    # For now, we'll just try to claim with a placeholder token
+    
+    # Check network connectivity
+    if ! curl -s -I https://xzxjwuzwltoapifcyzww.supabase.co > /dev/null 2>&1; then
+        log_message "No network connectivity"
+        sleep $RETRY_DELAY
+        RETRY_DELAY=$((RETRY_DELAY * 2))
+        continue
+    fi
+    
+    # Try to get parent token (would need proper auth in production)
+    log_message "Attempting authentication..."
+    
+    # For production, this would:
+    # 1. Try stored refresh token if available
+    # 2. Prompt user for password if needed
+    # 3. Use guardian-auth-client tool
+    
+    # Placeholder: Skip auth if we can't do it automatically
+    log_message "Manual activation required - please run guardian-activate-wizard"
+    
+    # Create a marker for the wizard
+    touch /etc/guardian/needs_manual_activation
+    
+    break
+done
+
+if [ -f /etc/guardian/needs_manual_activation ]; then
+    log_message "Device requires manual activation"
+    log_message "Run: sudo guardian-activate-wizard"
+    exit 0
+fi
+
+log_message "Activation process completed"
