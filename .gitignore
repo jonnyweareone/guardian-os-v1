@@ -1,0 +1,59 @@
+# Build artifacts
+*.deb
+*.buildinfo
+*.changes
+*.dsc
+*.tar.gz
+*.tar.xz
+*.log
+
+# Build directories
+iso/chroot/
+iso/binary/
+iso/.build/
+iso/cache/
+iso/config/
+packages/*/debian/files
+packages/*/debian/*.debhelper*
+packages/*/debian/*.substvars
+packages/*/debian/guardian-*/
+repo/db/
+repo/dists/
+repo/pool/
+repo/incoming/
+
+# Assets (downloaded)
+assets/*.png
+assets/*.jpg
+assets/*.svg
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Environment files with secrets (IMPORTANT!)
+*.env
+!*.env.template
+!*.env.example
+
+# ISO images
+*.iso
+*.img
+
+# GPG keys (private)
+*.gpg
+*.key
+!*.asc
+!GPG-KEY-*.asc
+
+# System files
+.directory
+Thumbs.db

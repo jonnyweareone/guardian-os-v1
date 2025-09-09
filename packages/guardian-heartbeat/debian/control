@@ -1,0 +1,13 @@
+Source: guardian-heartbeat
+Section: admin
+Priority: optional
+Maintainer: Guardian OS Team <support@gameguardian.ai>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.0
+
+Package: guardian-heartbeat
+Architecture: all
+Depends: ${misc:Depends}, systemd, bash, curl, jq
+Description: Guardian OS Heartbeat Service
+ Telemetry and heartbeat service for Guardian OS that communicates
+ with the Supabase backend using JWT authentication.
