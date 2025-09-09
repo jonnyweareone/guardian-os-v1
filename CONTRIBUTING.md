@@ -19,9 +19,9 @@ We use GitHub to host code, to track issues and feature requests, as well as acc
 2. Update the docs/ with any new documentation
 3. The PR will be merged once you have the sign-off of at least one maintainer
 
-## Any contributions you make will be under the MIT Software License
+## Contributor License Agreement
 
-When you submit code changes, your submissions are understood to be under the same [MIT License](LICENSE) that covers the project.
+When you submit code changes, your submissions are understood to be under the same license that covers the project. You retain copyright to your contributions while granting We Are One 1 Limited the right to use, modify, and distribute your contributions as part of Guardian OS.
 
 ## Report bugs using GitHub's [issues](https://github.com/jonnyweare/guardian-os-v1/issues)
 
@@ -41,4 +41,4 @@ We use GitHub issues to track public bugs. Report a bug by [opening a new issue]
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under its MIT License.
+By contributing, you agree that your contributions will be licensed under the Guardian OS License (Personal Use License; Commercial License Required). See [`LICENSE`](./LICENSE) for details.

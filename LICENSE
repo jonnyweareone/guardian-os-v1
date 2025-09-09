@@ -1,21 +1,29 @@
-MIT License
+Guardian OS License (Personal Use Only; Commercial License Required)
 
-Copyright (c) 2024 Guardian OS Team
+Copyright (c) 2025 We Are One 1 Limited. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Guardian OS consists of:
+- Ubuntu Linux and other open-source components, distributed under their original licenses.
+- Guardian-specific additions (including branding, installer modules, Calamares integrations, parental controls, Supabase/"cloud connect" integrations, Guardian Reflex, configuration utilities, and documentation), which are proprietary to We Are One 1 Limited.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+License Terms
+-------------
+1. Personal / Educational Use
+   You may download, install, and use Guardian OS free of charge for personal, educational, or research purposes. You may make a reasonable number of backup copies for your own use. Redistribution to third parties is not permitted without written permission.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. Commercial Use
+   Any commercial use—including, without limitation, preinstallation on devices, resale, bundling with hardware, managed services, hosting, distribution to customers/end users, or use within a for-profit organization—requires a separate commercial license from We Are One 1 Limited. Contact licensing@weareone1.com for terms.
+
+3. Trademarks
+   "Guardian", the Guardian shield logo, and associated branding are trademarks of We Are One 1 Limited. You may not use the names, logos, or trade dress to endorse or promote products or services, or to name derivative distributions, without prior written authorization. See TRADEMARKS.md.
+
+4. Open Source Components
+   Guardian OS includes open-source software (e.g., Ubuntu, GNOME) under their respective licenses (e.g., GPL). Those components remain governed by their original licenses and obligations. This license does not alter any rights granted by those licenses. Where this license conflicts with an open-source component's license with respect to that component, the open-source license controls.
+
+5. No Warranty
+   Guardian OS is provided "AS IS," without warranty of any kind, express or implied. To the maximum extent permitted by law, We Are One 1 Limited shall not be liable for any damages arising from the use of Guardian OS.
+
+6. Updates
+   We may update these terms for future releases. Continued use of new versions constitutes acceptance of updated terms.
+
+For commercial licensing, redistribution rights, and trademark permissions, contact: licensing@weareone1.com

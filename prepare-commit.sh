@@ -1,0 +1,22 @@
+#!/bin/bash
+# Prepare commit for license update
+
+echo "Guardian OS License Update"
+echo "=========================="
+echo ""
+echo "Changes made:"
+echo "✅ LICENSE - Updated to Personal Use License (Commercial License Required)"
+echo "✅ TRADEMARKS.md - Added trademark policy"
+echo "✅ README.md - Updated logo and license badge"
+echo "✅ CONTRIBUTING.md - Updated license references"
+echo ""
+echo "License: Personal/Educational use free; Commercial requires license from We Are One 1 Limited"
+echo "Contact: licensing@weareone1.com"
+echo ""
+echo "Ready to commit with message:"
+echo "chore(license): switch to Personal Use (commercial license required) + add trademark policy + update README logo"
+echo ""
+echo "You can now:"
+echo "1. Review changes in GitHub Desktop"
+echo "2. Commit with the message above"
+echo "3. Push to GitHub"

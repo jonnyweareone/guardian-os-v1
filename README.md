@@ -1,8 +1,4 @@
-# Guardian OS
-
-<p align="center">
-  <img src="https://gameguardian.ai/lovable-uploads/guardian-logo2-transparent.png" alt="Guardian OS Logo" width="200">
-</p>
+![Guardian logo](https://gameguardian.ai/lovable-uploads/guardian-logo-shield-text-dark.png)
 
 <p align="center">
   <strong>A privacy-focused Ubuntu distribution with AI-powered parental controls</strong>
@@ -11,7 +7,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Ubuntu-24.04%20LTS-orange" alt="Ubuntu 24.04">
   <img src="https://img.shields.io/badge/GNOME-46-blue" alt="GNOME 46">
-  <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License">
+  <img src="https://img.shields.io/badge/License-Personal%20Use%20Only-blue" alt="Personal Use Only">
   <img src="https://img.shields.io/badge/Status-Beta-yellow" alt="Beta">
 </p>
 
@@ -129,7 +125,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## 📄 License
 
-Guardian OS is released under the MIT License. See [LICENSE](LICENSE) for details.
+Guardian OS is released under a **Personal Use License** — free for personal/educational use; **commercial use requires a license** from *We Are One 1 Limited*. See [`LICENSE`](./LICENSE) and [`TRADEMARKS.md`](./TRADEMARKS.md).
 
 ## 🆘 Support
 
