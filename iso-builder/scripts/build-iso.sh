@@ -1,15 +1,30 @@
 #!/bin/bash
-# Guardian OS ISO Builder
-# Builds a custom Pop!_OS 24.04 COSMIC-based ISO with Guardian components
-# Uses the OFFICIAL Pop!_OS ISO builder from https://github.com/pop-os/iso
+# Guardian OS ISO Builder v2.0
+# Remasters Pop!_OS 24.04 COSMIC with Guardian components
+# 
+# This script:
+# 1. Downloads the official Pop!_OS 24.04 ISO
+# 2. Extracts the filesystem
+# 3. Injects Guardian packages and branding
+# 4. Repacks into a new ISO
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
-BUILD_DIR="${PROJECT_ROOT}/iso-build"
-OUTPUT_DIR="${PROJECT_ROOT}/iso-output"
-POP_ISO_REPO="https://github.com/pop-os/iso.git"
+
+# Configuration
+POP_VERSION="24.04"
+POP_ISO_URL="https://iso.pop-os.org/24.04/amd64/intel/40/pop-os_24.04_amd64_intel_40.iso"
+GUARDIAN_VERSION="1.0.0"
+GITHUB_RELEASE_URL="https://github.com/jonnyweareone/guardian-os-v1/releases/download/v${GUARDIAN_VERSION}"
+
+# Directories
+WORK_DIR="/opt/guardian-iso-build"
+ISO_MOUNT="${WORK_DIR}/iso-mount"
+SQUASHFS_DIR="${WORK_DIR}/squashfs"
+NEW_ISO_DIR="${WORK_DIR}/new-iso"
+OUTPUT_DIR="${WORK_DIR}/output"
 
 # Colors
 RED='\033[0;31m'
@@ -18,318 +33,335 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-echo -e "${CYAN}"
-echo "╔═══════════════════════════════════════════════════════════════╗"
-echo "║              🛡️  Guardian OS ISO Builder                      ║"
-echo "║                                                               ║"
-echo "║         AI Powered Protection For Families                    ║"
-echo "║         Built on Pop!_OS 24.04 LTS + COSMIC Desktop           ║"
-echo "╚═══════════════════════════════════════════════════════════════╝"
-echo -e "${NC}"
+log() { echo -e "${CYAN}[$(date +%H:%M:%S)]${NC} $1"; }
+success() { echo -e "${GREEN}✓${NC} $1"; }
+warn() { echo -e "${YELLOW}⚠${NC} $1"; }
+error() { echo -e "${RED}✗${NC} $1"; exit 1; }
 
-# Check if running as root
+print_banner() {
+    echo -e "${CYAN}"
+    cat << 'EOF'
+╔═══════════════════════════════════════════════════════════════════╗
+║                                                                   ║
+║   ██████╗ ██╗   ██╗ █████╗ ██████╗ ██████╗ ██╗ █████╗ ███╗   ██╗  ║
+║  ██╔════╝ ██║   ██║██╔══██╗██╔══██╗██╔══██╗██║██╔══██╗████╗  ██║  ║
+║  ██║  ███╗██║   ██║███████║██████╔╝██║  ██║██║███████║██╔██╗ ██║  ║
+║  ██║   ██║██║   ██║██╔══██║██╔══██╗██║  ██║██║██╔══██║██║╚██╗██║  ║
+║  ╚██████╔╝╚██████╔╝██║  ██║██║  ██║██████╔╝██║██║  ██║██║ ╚████║  ║
+║   ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝  ║
+║                         OS  v1.0.0                                ║
+║                                                                   ║
+║            AI Powered Protection For Families                     ║
+║            Built on Pop!_OS 24.04 LTS + COSMIC                    ║
+╚═══════════════════════════════════════════════════════════════════╝
+EOF
+    echo -e "${NC}"
+}
+
 check_root() {
     if [ "$EUID" -ne 0 ]; then
-        echo -e "${RED}Please run as root (sudo ./build-iso.sh)${NC}"
-        exit 1
+        error "Please run as root: sudo $0"
     fi
 }
 
-# Check dependencies
 check_deps() {
-    echo -e "${CYAN}Checking dependencies...${NC}"
+    log "Checking dependencies..."
     
+    local deps=(wget unsquashfs mksquashfs xorriso mount umount)
     local missing=()
     
-    for cmd in git make debootstrap mksquashfs xorriso gpg curl wget; do
-        if ! command -v "$cmd" &> /dev/null; then
-            missing+=("$cmd")
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep" &>/dev/null; then
+            missing+=("$dep")
         fi
     done
     
     if [ ${#missing[@]} -ne 0 ]; then
-        echo -e "${YELLOW}Installing missing dependencies: ${missing[*]}${NC}"
-        apt-get update
-        apt-get install -y git make debootstrap squashfs-tools xorriso gnupg curl wget \
-            live-build debian-archive-keyring ubuntu-keyring
+        log "Installing missing dependencies..."
+        apt-get update -qq
+        apt-get install -y squashfs-tools xorriso wget curl
     fi
     
-    echo -e "${GREEN}✓ All dependencies ready${NC}"
+    success "All dependencies ready"
 }
 
-# Import Pop!_OS signing key
-import_pop_key() {
-    echo -e "${CYAN}Importing Pop!_OS signing key...${NC}"
+download_pop_iso() {
+    log "Downloading Pop!_OS ${POP_VERSION} ISO..."
     
-    # Pop!_OS APT signing key
-    if ! gpg --list-keys "204DD8AEC33A7AFF" &>/dev/null; then
-        curl -fsSL https://apt.pop-os.org/key.asc | gpg --import
-        echo -e "${GREEN}✓ Pop!_OS key imported${NC}"
-    else
-        echo -e "${GREEN}✓ Pop!_OS key already present${NC}"
-    fi
-}
-
-# Clone or update official Pop!_OS ISO builder
-setup_pop_builder() {
-    echo -e "${CYAN}Setting up official Pop!_OS ISO builder...${NC}"
+    local iso_file="${WORK_DIR}/pop-os-base.iso"
     
-    mkdir -p "$BUILD_DIR"
-    cd "$BUILD_DIR"
-    
-    if [ ! -d "pop-iso" ]; then
-        echo "  Cloning official Pop!_OS ISO builder..."
-        git clone "$POP_ISO_REPO" pop-iso
-    else
-        echo "  Updating existing builder..."
-        cd pop-iso
-        git fetch origin
-        git reset --hard origin/master
-        cd ..
+    if [ -f "$iso_file" ]; then
+        log "ISO already downloaded, verifying..."
+        if file "$iso_file" | grep -q "ISO 9660"; then
+            success "Using cached ISO"
+            return
+        else
+            warn "Cached ISO corrupted, re-downloading..."
+            rm -f "$iso_file"
+        fi
     fi
     
-    echo -e "${GREEN}✓ Pop!_OS ISO builder ready${NC}"
+    mkdir -p "$WORK_DIR"
+    wget --progress=bar:force:noscroll -O "$iso_file" "$POP_ISO_URL"
+    
+    if [ ! -f "$iso_file" ]; then
+        error "Failed to download Pop!_OS ISO"
+    fi
+    
+    success "Pop!_OS ISO downloaded ($(du -h "$iso_file" | cut -f1))"
 }
 
-# Download Guardian .deb packages from GitHub releases
 download_guardian_packages() {
-    echo -e "${CYAN}Downloading Guardian component packages...${NC}"
+    log "Downloading Guardian component packages..."
     
-    local pkg_dir="${BUILD_DIR}/guardian-packages"
+    local pkg_dir="${WORK_DIR}/packages"
     mkdir -p "$pkg_dir"
-    cd "$pkg_dir"
     
-    # Download from latest GitHub release
-    local release_url="https://github.com/jonnyweareone/guardian-os-v1/releases/latest/download"
+    local packages=(guardian-daemon guardian-wizard)
     
-    for pkg in guardian-daemon guardian-wizard guardian-settings guardian-store; do
-        local deb_file="${pkg}_1.0.0_amd64.deb"
-        if [ ! -f "$deb_file" ]; then
-            echo "  Downloading ${pkg}..."
-            wget -q "${release_url}/${deb_file}" -O "$deb_file" 2>/dev/null || {
-                echo -e "${YELLOW}  ⚠ ${pkg} not yet available in release${NC}"
+    for pkg in "${packages[@]}"; do
+        local deb="${pkg}_${GUARDIAN_VERSION}_amd64.deb"
+        if [ ! -f "${pkg_dir}/${deb}" ]; then
+            log "  Downloading ${pkg}..."
+            wget -q "${GITHUB_RELEASE_URL}/${deb}" -O "${pkg_dir}/${deb}" || {
+                warn "Could not download ${pkg} from release"
             }
         else
-            echo -e "${GREEN}  ✓ ${pkg} already downloaded${NC}"
+            success "  ${pkg} already downloaded"
         fi
     done
+    
+    # List what we got
+    log "Available packages:"
+    ls -la "${pkg_dir}/"*.deb 2>/dev/null || warn "No .deb packages found"
 }
 
-# Create Guardian customization overlay
-create_guardian_overlay() {
-    echo -e "${CYAN}Creating Guardian customizations...${NC}"
+extract_iso() {
+    log "Extracting Pop!_OS ISO..."
     
-    local overlay_dir="${BUILD_DIR}/pop-iso/data/guardian"
-    mkdir -p "$overlay_dir"
+    local iso_file="${WORK_DIR}/pop-os-base.iso"
     
-    # Copy branding
-    if [ -d "${PROJECT_ROOT}/branding" ]; then
-        cp -r "${PROJECT_ROOT}/branding" "$overlay_dir/"
-    fi
+    # Create directories
+    mkdir -p "$ISO_MOUNT" "$SQUASHFS_DIR" "$NEW_ISO_DIR"
     
-    # Copy Guardian packages
-    mkdir -p "$overlay_dir/packages"
-    cp "${BUILD_DIR}/guardian-packages"/*.deb "$overlay_dir/packages/" 2>/dev/null || true
+    # Unmount if already mounted
+    umount "$ISO_MOUNT" 2>/dev/null || true
     
-    # Create Guardian-specific package list
-    cat > "${BUILD_DIR}/pop-iso/data/guardian/packages.list" << 'EOF'
-# Guardian OS Additional Packages
-guardian-daemon
-guardian-wizard
-guardian-settings
-guardian-store
-EOF
+    # Mount ISO
+    mount -o loop,ro "$iso_file" "$ISO_MOUNT"
+    success "ISO mounted"
+    
+    # Copy ISO contents (excluding squashfs)
+    log "Copying ISO structure..."
+    rsync -a --exclude='casper/filesystem.squashfs' "$ISO_MOUNT/" "$NEW_ISO_DIR/"
+    success "ISO structure copied"
+    
+    # Extract squashfs
+    log "Extracting filesystem (this takes a while)..."
+    rm -rf "$SQUASHFS_DIR"
+    unsquashfs -d "$SQUASHFS_DIR" "$ISO_MOUNT/casper/filesystem.squashfs"
+    success "Filesystem extracted"
+    
+    # Unmount ISO
+    umount "$ISO_MOUNT"
+}
 
-    # Create post-install hook for Guardian
-    mkdir -p "${BUILD_DIR}/pop-iso/data/guardian/hooks"
-    cat > "${BUILD_DIR}/pop-iso/data/guardian/hooks/guardian-setup.sh" << 'EOF'
+inject_guardian() {
+    log "Injecting Guardian OS components..."
+    
+    local pkg_dir="${WORK_DIR}/packages"
+    local root="$SQUASHFS_DIR"
+    
+    # Copy packages into chroot
+    mkdir -p "${root}/tmp/guardian-packages"
+    cp "${pkg_dir}"/*.deb "${root}/tmp/guardian-packages/" 2>/dev/null || true
+    
+    # Mount required filesystems for chroot
+    mount --bind /dev "${root}/dev"
+    mount --bind /dev/pts "${root}/dev/pts"
+    mount --bind /proc "${root}/proc"
+    mount --bind /sys "${root}/sys"
+    mount --bind /run "${root}/run"
+    
+    # Resolve DNS in chroot
+    cp /etc/resolv.conf "${root}/etc/resolv.conf"
+    
+    # Install packages inside chroot
+    log "Installing Guardian packages in chroot..."
+    chroot "$root" /bin/bash << 'CHROOT_SCRIPT'
 #!/bin/bash
-# Guardian OS Post-Install Setup
+set -e
 
-# Enable Guardian daemon
-systemctl enable guardian-daemon || true
-
-# Set Guardian wallpaper
-if [ -f /usr/share/backgrounds/guardian-wallpaper.png ]; then
-    gsettings set org.gnome.desktop.background picture-uri "file:///usr/share/backgrounds/guardian-wallpaper.png" 2>/dev/null || true
+# Install any .deb packages
+if ls /tmp/guardian-packages/*.deb 1>/dev/null 2>&1; then
+    dpkg -i /tmp/guardian-packages/*.deb || apt-get install -f -y
 fi
 
-# Create Guardian autostart for wizard (first boot)
-mkdir -p /etc/skel/.config/autostart
-cat > /etc/skel/.config/autostart/guardian-wizard.desktop << 'DESKTOP'
+# Enable guardian-daemon service if it exists
+if [ -f /lib/systemd/system/guardian-daemon.service ]; then
+    systemctl enable guardian-daemon || true
+fi
+
+# Clean up
+rm -rf /tmp/guardian-packages
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+
+echo "Guardian components installed"
+CHROOT_SCRIPT
+    
+    success "Guardian packages installed"
+    
+    # Unmount chroot filesystems
+    umount "${root}/run" 2>/dev/null || true
+    umount "${root}/sys" 2>/dev/null || true
+    umount "${root}/proc" 2>/dev/null || true
+    umount "${root}/dev/pts" 2>/dev/null || true
+    umount "${root}/dev" 2>/dev/null || true
+}
+
+apply_branding() {
+    log "Applying Guardian OS branding..."
+    
+    local root="$SQUASHFS_DIR"
+    local branding="${PROJECT_ROOT}/branding"
+    
+    # Copy wallpaper
+    if [ -f "${branding}/wallpapers/guardian-wallpaper.png" ]; then
+        cp "${branding}/wallpapers/guardian-wallpaper.png" "${root}/usr/share/backgrounds/"
+        success "Wallpaper installed"
+    fi
+    
+    # Copy logo
+    if [ -d "${branding}/logo" ]; then
+        mkdir -p "${root}/usr/share/icons/guardian"
+        cp "${branding}/logo"/*.png "${root}/usr/share/icons/guardian/" 2>/dev/null || true
+        success "Logo installed"
+    fi
+    
+    # Update OS release info
+    cat > "${root}/etc/os-release" << EOF
+NAME="Guardian OS"
+VERSION="${GUARDIAN_VERSION}"
+ID=guardian
+ID_LIKE=ubuntu pop
+PRETTY_NAME="Guardian OS ${GUARDIAN_VERSION}"
+VERSION_ID="${GUARDIAN_VERSION}"
+HOME_URL="https://gameguardian.ai"
+SUPPORT_URL="https://gameguardian.ai/support"
+BUG_REPORT_URL="https://github.com/jonnyweareone/guardian-os-v1/issues"
+PRIVACY_POLICY_URL="https://gameguardian.ai/privacy"
+VERSION_CODENAME=guardian
+UBUNTU_CODENAME=noble
+EOF
+    success "OS branding updated"
+    
+    # Create first-boot wizard autostart
+    mkdir -p "${root}/etc/skel/.config/autostart"
+    cat > "${root}/etc/skel/.config/autostart/guardian-wizard.desktop" << EOF
 [Desktop Entry]
 Type=Application
-Name=Guardian Setup Wizard
+Name=Guardian OS Setup
+Comment=Configure your family-safe system
 Exec=/usr/bin/guardian-wizard
+Icon=guardian
 Terminal=false
+Categories=System;Settings;
 X-GNOME-Autostart-enabled=true
 OnlyShowIn=COSMIC;GNOME;
-DESKTOP
-
-echo "Guardian OS setup complete"
 EOF
-    chmod +x "${BUILD_DIR}/pop-iso/data/guardian/hooks/guardian-setup.sh"
-    
-    echo -e "${GREEN}✓ Guardian customizations ready${NC}"
+    success "First-boot wizard configured"
 }
 
-# Modify Pop!_OS ISO build configuration
-configure_build() {
-    echo -e "${CYAN}Configuring ISO build...${NC}"
+repack_squashfs() {
+    log "Repacking filesystem (this takes a while)..."
     
-    cd "${BUILD_DIR}/pop-iso"
+    local squashfs_out="${NEW_ISO_DIR}/casper/filesystem.squashfs"
     
-    # Create Guardian-specific config extending 24.04
-    cat > config/guardian-os/24.04.mk << 'EOF'
-# Guardian OS 24.04 Configuration
-# Extends Pop!_OS 24.04 LTS with Guardian components
-
-include config/pop-os/24.04.mk
-
-# Guardian-specific packages to add
-POST_DISTRO_PKGS+=\
-    guardian-daemon \
-    guardian-wizard \
-    guardian-settings \
-    guardian-store
-
-# Guardian branding
-DISTRO_NAME=Guardian OS
-DISTRO_VERSION=1.0.0
-EOF
-
-    mkdir -p config/guardian-os
+    rm -f "$squashfs_out"
+    mksquashfs "$SQUASHFS_DIR" "$squashfs_out" \
+        -comp xz \
+        -b 1M \
+        -Xdict-size 100% \
+        -no-recovery
     
-    echo -e "${GREEN}✓ Build configured${NC}"
+    # Update filesystem size
+    du -sx --block-size=1 "$SQUASHFS_DIR" | cut -f1 > "${NEW_ISO_DIR}/casper/filesystem.size"
+    
+    success "Filesystem repacked ($(du -h "$squashfs_out" | cut -f1))"
 }
 
-# Build the ISO
-build_iso() {
-    echo -e "${CYAN}Building Guardian OS ISO...${NC}"
-    echo ""
-    echo -e "${YELLOW}⏱️  This will take 30-60 minutes depending on your system and internet speed.${NC}"
-    echo ""
+create_iso() {
+    log "Creating Guardian OS ISO..."
     
-    cd "${BUILD_DIR}/pop-iso"
-    
-    # Install build dependencies
-    if [ -f "scripts/deps.sh" ]; then
-        echo "  Installing Pop!_OS ISO build dependencies..."
-        ./scripts/deps.sh
-    fi
-    
-    # Run the build
-    echo "  Starting ISO build..."
-    make DISTRO=pop-os RELEASE=24.04
-    
-    # Copy output
     mkdir -p "$OUTPUT_DIR"
+    local output_iso="${OUTPUT_DIR}/guardian-os_${GUARDIAN_VERSION}_amd64.iso"
     
-    # Find and copy the built ISO
-    find build/ -name "*.iso" -exec cp {} "$OUTPUT_DIR/" \;
+    # Generate MD5 checksums
+    cd "$NEW_ISO_DIR"
+    find . -type f -not -name 'md5sum.txt' -print0 | xargs -0 md5sum > md5sum.txt
     
-    # Rename to Guardian OS
-    for iso in "$OUTPUT_DIR"/*.iso; do
-        if [ -f "$iso" ]; then
-            local newname=$(echo "$iso" | sed 's/pop-os/guardian-os/g')
-            mv "$iso" "$newname" 2>/dev/null || true
-        fi
-    done
+    # Create ISO
+    xorriso -as mkisofs \
+        -volid "Guardian OS ${GUARDIAN_VERSION}" \
+        -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
+        -c isolinux/boot.cat \
+        -b isolinux/isolinux.bin \
+        -no-emul-boot \
+        -boot-load-size 4 \
+        -boot-info-table \
+        -eltorito-alt-boot \
+        -e boot/grub/efi.img \
+        -no-emul-boot \
+        -isohybrid-gpt-basdat \
+        -o "$output_iso" \
+        "$NEW_ISO_DIR" 2>/dev/null || {
+            # Fallback for different ISO structure
+            xorriso -as mkisofs \
+                -volid "Guardian OS ${GUARDIAN_VERSION}" \
+                -o "$output_iso" \
+                "$NEW_ISO_DIR"
+        }
     
-    echo -e "${GREEN}✓ ISO built successfully${NC}"
+    success "ISO created: $output_iso"
     echo ""
-    echo -e "${CYAN}Output:${NC} ${OUTPUT_DIR}/"
-    ls -lh "$OUTPUT_DIR"/*.iso 2>/dev/null || echo "No ISO files found"
+    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║                    🎉 BUILD COMPLETE!                             ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "Output: ${CYAN}${output_iso}${NC}"
+    echo -e "Size:   ${CYAN}$(du -h "$output_iso" | cut -f1)${NC}"
+    echo ""
+    echo "To test: Write to USB with 'dd' or use in a VM"
+    echo "  dd if=${output_iso} of=/dev/sdX bs=4M status=progress"
 }
 
-# Alternative: Remaster existing Pop!_OS ISO
-remaster_iso() {
-    echo -e "${CYAN}Remastering Pop!_OS ISO with Guardian components...${NC}"
-    
-    local pop_iso_url="https://iso.pop-os.org/24.04/amd64/intel/40/pop-os_24.04_amd64_intel_40.iso"
-    local pop_iso="${BUILD_DIR}/pop-os-base.iso"
-    
-    # Download Pop!_OS ISO if not present
-    if [ ! -f "$pop_iso" ]; then
-        echo "  Downloading Pop!_OS 24.04 ISO (~2.5GB)..."
-        wget -q --show-progress "$pop_iso_url" -O "$pop_iso"
-    fi
-    
-    echo -e "${GREEN}✓ Base ISO ready${NC}"
-    
-    # Extract, modify, repack
-    local work_dir="${BUILD_DIR}/remaster"
-    mkdir -p "$work_dir"/{iso,squashfs}
-    
-    echo "  Extracting ISO..."
-    mount -o loop "$pop_iso" "$work_dir/iso"
-    
-    echo "  Extracting squashfs..."
-    unsquashfs -d "$work_dir/squashfs" "$work_dir/iso/casper/filesystem.squashfs"
-    
-    echo "  Adding Guardian packages..."
-    cp "${BUILD_DIR}/guardian-packages"/*.deb "$work_dir/squashfs/tmp/" 2>/dev/null || true
-    chroot "$work_dir/squashfs" dpkg -i /tmp/*.deb 2>/dev/null || true
-    rm -f "$work_dir/squashfs/tmp"/*.deb
-    
-    echo "  Repacking squashfs..."
-    mksquashfs "$work_dir/squashfs" "$work_dir/filesystem.squashfs" -comp xz
-    
-    echo "  Creating new ISO..."
-    # This is simplified - full ISO creation needs more steps
-    
-    umount "$work_dir/iso"
-    
-    echo -e "${GREEN}✓ Remaster complete${NC}"
+cleanup() {
+    log "Cleaning up..."
+    umount "$ISO_MOUNT" 2>/dev/null || true
+    umount "${SQUASHFS_DIR}/run" 2>/dev/null || true
+    umount "${SQUASHFS_DIR}/sys" 2>/dev/null || true
+    umount "${SQUASHFS_DIR}/proc" 2>/dev/null || true
+    umount "${SQUASHFS_DIR}/dev/pts" 2>/dev/null || true
+    umount "${SQUASHFS_DIR}/dev" 2>/dev/null || true
 }
 
-# Main menu
+# Main execution
 main() {
+    print_banner
     check_root
+    
+    trap cleanup EXIT
+    
     check_deps
-    import_pop_key
-    
-    echo ""
-    echo -e "${CYAN}Choose build method:${NC}"
-    echo "  1) Full build from official Pop!_OS ISO builder (recommended)"
-    echo "  2) Remaster existing Pop!_OS ISO (faster, simpler)"
-    echo "  3) Exit"
-    echo ""
-    read -p "Select option [1-3]: " choice
-    
-    case $choice in
-        1)
-            setup_pop_builder
-            download_guardian_packages
-            create_guardian_overlay
-            configure_build
-            build_iso
-            ;;
-        2)
-            download_guardian_packages
-            remaster_iso
-            ;;
-        3)
-            echo "Exiting."
-            exit 0
-            ;;
-        *)
-            echo -e "${RED}Invalid option${NC}"
-            exit 1
-            ;;
-    esac
-    
-    echo ""
-    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║              🎉 Guardian OS Build Complete!                   ║${NC}"
-    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    download_pop_iso
+    download_guardian_packages
+    extract_iso
+    inject_guardian
+    apply_branding
+    repack_squashfs
+    create_iso
 }
 
-# Allow running specific functions
-if [ "$1" == "--deps-only" ]; then
-    check_deps
-elif [ "$1" == "--download-only" ]; then
-    download_guardian_packages
-else
-    main "$@"
-fi
+# Run
+main "$@"
