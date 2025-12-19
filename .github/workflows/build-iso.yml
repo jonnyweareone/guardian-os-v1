@@ -36,7 +36,21 @@ jobs:
             libssl-dev \
             libsqlite3-dev \
             libdbus-1-dev \
-            pkg-config
+            pkg-config \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libinput-dev \
+            libudev-dev \
+            libgbm-dev \
+            libseat-dev \
+            libxcb1-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libexpat1-dev \
+            libfontconfig-dev \
+            libfreetype-dev \
+            clang
       
       - name: Build guardian-daemon
         run: |
@@ -82,13 +96,20 @@ jobs:
               cp "$BINARY" "${DEB_DIR}/usr/bin/${component}"
               chmod 755 "${DEB_DIR}/usr/bin/${component}"
               
+              # Different deps for daemon vs GUI apps
+              if [ "$component" = "guardian-daemon" ]; then
+                DEPENDS="libssl3, libsqlite3-0"
+              else
+                DEPENDS="libssl3, libsqlite3-0, libxkbcommon0, libwayland-client0, libwayland-cursor0, libxcb1, libfontconfig1"
+              fi
+              
               cat > "${DEB_DIR}/DEBIAN/control" << EOF
           Package: ${component}
           Version: ${VERSION}
           Section: misc
           Priority: optional
           Architecture: amd64
-          Depends: libssl3, libsqlite3-0
+          Depends: ${DEPENDS}
           Maintainer: Guardian OS Team <support@gameguardian.ai>
           Description: ${component} - Guardian OS component
            AI Powered Protection For Families.
