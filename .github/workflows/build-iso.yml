@@ -146,6 +146,12 @@ jobs:
           chmod +x convert-assets.sh
           ./convert-assets.sh || echo "Asset conversion completed with warnings"
       
+      - name: Generate GRUB theme assets
+        run: |
+          cd branding/grub
+          chmod +x generate-grub-assets.sh
+          ./generate-grub-assets.sh || echo "GRUB asset generation completed"
+      
       - name: List branding assets
         run: |
           echo "=== Branding assets ==="

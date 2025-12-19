@@ -6,11 +6,9 @@
 # ============================================
 
 title-text: ""
-title-font: "Inter Regular 16"
-title-color: "#ffffff"
 desktop-image: "background.png"
 desktop-color: "#010409"
-terminal-font: "Terminus Regular 14"
+terminal-font: "DejaVu Sans Mono Regular 14"
 terminal-box: "terminal_box_*.png"
 terminal-left: "0"
 terminal-top: "0"
@@ -24,17 +22,17 @@ terminal-border: "0"
 
 + boot_menu {
     left = 50%-250
-    top = 50%-150
+    top = 50%-100
     width = 500
-    height = 300
+    height = 250
     
-    item_font = "Inter Regular 16"
+    item_font = "DejaVu Sans Regular 16"
     item_color = "#a0a0a0"
     item_height = 40
     item_padding = 15
     item_spacing = 10
     
-    selected_item_font = "Inter Bold 16"
+    selected_item_font = "DejaVu Sans Bold 16"
     selected_item_color = "#00E5FF"
     selected_item_pixmap_style = "select_*.png"
     
@@ -55,7 +53,7 @@ terminal-border: "0"
 + progress_bar {
     id = "__timeout__"
     left = 50%-150
-    top = 50%+180
+    top = 50%+160
     width = 300
     height = 8
     
@@ -73,36 +71,31 @@ terminal-border: "0"
 
 + label {
     left = 50%-200
-    top = 50%-220
+    top = 50%-170
     width = 400
     align = "center"
     id = "__timeout__"
     text = "Starting Guardian OS in %d seconds..."
-    font = "Inter Regular 12"
+    font = "DejaVu Sans Regular 12"
     color = "#666666"
 }
 
 + label {
     left = 50%-200
-    top = 100%-50
+    top = 100%-40
     width = 400
     align = "center"
-    text = "Guardian OS - Intelligent Gaming Protection"
-    font = "Inter Regular 11"
+    text = "Guardian OS - AI Powered Protection For Families"
+    font = "DejaVu Sans Regular 11"
     color = "#444444"
 }
 
 # ============================================
-# Hbox for logo placement
+# Logo
 # ============================================
 
-+ hbox {
-    left = 50%-100
-    top = 50%-350
-    width = 200
-    height = 120
-    
-    + image {
-        file = "guardian-logo.png"
-    }
++ image {
+    left = 50%-50
+    top = 50%-280
+    file = "guardian-logo.png"
 }
