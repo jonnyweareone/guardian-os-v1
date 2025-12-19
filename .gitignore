@@ -54,6 +54,13 @@ Cargo.lock
 !*.env.template
 !*.env.example
 
+# Keys and tokens
+*_key.txt
+*_secret.txt
+*.pem
+*.p12
+service_account.json
+
 # ISO images
 *.iso
 *.img
