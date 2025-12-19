@@ -1,0 +1,10 @@
+#!/usr/bin/expect -f
+set timeout 30
+spawn ssh -o StrictHostKeyChecking=no root@192.248.163.171
+expect "password:"
+send "j?Q9qZ9\]Y##qpafr\r"
+expect "# "
+send "cd /opt/guardian-sync && sed -i 's/guardian-os.net/gameguardian.ai/g' .env && cat .env\r"
+expect "# "
+send "exit\r"
+expect eof

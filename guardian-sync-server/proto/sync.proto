@@ -1,0 +1,164 @@
+syntax = "proto3";
+
+package guardian.sync.v1;
+
+// ============================================================================
+// Settings Sync Service - Desktop settings synchronization
+// ============================================================================
+
+service SyncService {
+  // Push settings from device to server
+  rpc PushSettings(PushSettingsRequest) returns (PushSettingsResponse);
+  
+  // Pull settings from server to device
+  rpc PullSettings(PullSettingsRequest) returns (PullSettingsResponse);
+  
+  // Get settings diff since last sync
+  rpc GetSettingsDiff(GetSettingsDiffRequest) returns (GetSettingsDiffResponse);
+  
+  // Stream settings changes (real-time sync)
+  rpc StreamChanges(StreamChangesRequest) returns (stream SettingsChange);
+  
+  // Resolve sync conflicts
+  rpc ResolveConflict(ResolveConflictRequest) returns (ResolveConflictResponse);
+  
+  // Get sync status
+  rpc GetSyncStatus(GetSyncStatusRequest) returns (GetSyncStatusResponse);
+}
+
+// Settings categories
+enum SettingsCategory {
+  SETTINGS_CATEGORY_UNSPECIFIED = 0;
+  SETTINGS_CATEGORY_DESKTOP = 1;      // Desktop appearance, wallpaper
+  SETTINGS_CATEGORY_PANEL = 2;        // Panel configuration
+  SETTINGS_CATEGORY_DOCK = 3;         // Dock settings
+  SETTINGS_CATEGORY_KEYBOARD = 4;     // Keyboard shortcuts
+  SETTINGS_CATEGORY_DISPLAY = 5;      // Display settings
+  SETTINGS_CATEGORY_POWER = 6;        // Power management
+  SETTINGS_CATEGORY_NETWORK = 7;      // Network preferences
+  SETTINGS_CATEGORY_APPS = 8;         // App preferences
+  SETTINGS_CATEGORY_THEME = 9;        // Theme settings
+  SETTINGS_CATEGORY_GUARDIAN = 10;    // Guardian-specific settings
+}
+
+// Push Settings
+message PushSettingsRequest {
+  string device_id = 1;
+  repeated SettingsEntry entries = 2;
+  int64 client_timestamp = 3;
+}
+
+message SettingsEntry {
+  string key = 1;
+  bytes value = 2;  // JSON-encoded value
+  SettingsCategory category = 3;
+  int64 modified_at = 4;
+  string checksum = 5;
+}
+
+message PushSettingsResponse {
+  bool success = 1;
+  int64 server_timestamp = 2;
+  repeated ConflictEntry conflicts = 3;
+}
+
+message ConflictEntry {
+  string key = 1;
+  bytes server_value = 2;
+  bytes client_value = 3;
+  int64 server_modified = 4;
+  int64 client_modified = 5;
+}
+
+// Pull Settings
+message PullSettingsRequest {
+  string device_id = 1;
+  int64 since_timestamp = 2;  // 0 = full sync
+  repeated SettingsCategory categories = 3;  // Empty = all categories
+}
+
+message PullSettingsResponse {
+  repeated SettingsEntry entries = 1;
+  int64 server_timestamp = 2;
+  bool has_more = 3;
+  string continuation_token = 4;
+}
+
+// Get Settings Diff
+message GetSettingsDiffRequest {
+  string device_id = 1;
+  int64 since_timestamp = 2;
+}
+
+message GetSettingsDiffResponse {
+  repeated SettingsDiffEntry changes = 1;
+  int64 server_timestamp = 2;
+}
+
+message SettingsDiffEntry {
+  string key = 1;
+  DiffOperation operation = 2;
+  bytes new_value = 3;
+  int64 modified_at = 4;
+}
+
+enum DiffOperation {
+  DIFF_OPERATION_UNSPECIFIED = 0;
+  DIFF_OPERATION_ADD = 1;
+  DIFF_OPERATION_UPDATE = 2;
+  DIFF_OPERATION_DELETE = 3;
+}
+
+// Stream Changes
+message StreamChangesRequest {
+  string device_id = 1;
+  repeated SettingsCategory categories = 2;
+}
+
+message SettingsChange {
+  string key = 1;
+  bytes value = 2;
+  SettingsCategory category = 3;
+  DiffOperation operation = 4;
+  int64 timestamp = 5;
+  string source_device_id = 6;
+}
+
+// Resolve Conflict
+message ResolveConflictRequest {
+  string key = 1;
+  ConflictResolution resolution = 2;
+  bytes merged_value = 3;  // For MERGE resolution
+}
+
+enum ConflictResolution {
+  CONFLICT_RESOLUTION_UNSPECIFIED = 0;
+  CONFLICT_RESOLUTION_USE_SERVER = 1;
+  CONFLICT_RESOLUTION_USE_CLIENT = 2;
+  CONFLICT_RESOLUTION_MERGE = 3;
+}
+
+message ResolveConflictResponse {
+  bool success = 1;
+  SettingsEntry resolved_entry = 2;
+}
+
+// Sync Status
+message GetSyncStatusRequest {
+  string device_id = 1;
+}
+
+message GetSyncStatusResponse {
+  int64 last_sync_timestamp = 1;
+  int32 pending_changes = 2;
+  int32 conflicts_count = 3;
+  SyncState state = 4;
+}
+
+enum SyncState {
+  SYNC_STATE_UNSPECIFIED = 0;
+  SYNC_STATE_IDLE = 1;
+  SYNC_STATE_SYNCING = 2;
+  SYNC_STATE_ERROR = 3;
+  SYNC_STATE_OFFLINE = 4;
+}

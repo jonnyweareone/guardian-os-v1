@@ -1,0 +1,224 @@
+name: Build Guardian OS ISO
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-components:
+    name: Build Guardian Components
+    runs-on: ubuntu-24.04
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libssl-dev \
+            libsqlite3-dev \
+            libdbus-1-dev \
+            libgtk-4-dev \
+            libadwaita-1-dev \
+            pkg-config
+      
+      - name: Build guardian-daemon
+        run: |
+          cd guardian-components/guardian-daemon
+          cargo build --release
+      
+      - name: Build guardian-wizard
+        run: |
+          cd guardian-components/guardian-wizard
+          cargo build --release
+      
+      - name: Build guardian-settings
+        run: |
+          cd guardian-components/guardian-settings
+          cargo build --release
+      
+      - name: Build guardian-store
+        run: |
+          cd guardian-components/guardian-store
+          cargo build --release
+      
+      - name: Create .deb packages
+        run: |
+          VERSION=${{ github.event.inputs.version || '1.0.0' }}
+          
+          for component in guardian-daemon guardian-wizard guardian-settings guardian-store; do
+            echo "Packaging ${component}..."
+            
+            DEB_DIR="packages/${component}_${VERSION}_amd64"
+            mkdir -p "${DEB_DIR}/DEBIAN"
+            mkdir -p "${DEB_DIR}/usr/bin"
+            mkdir -p "${DEB_DIR}/usr/share/applications"
+            
+            # Copy binary
+            cp "guardian-components/${component}/target/release/${component}" "${DEB_DIR}/usr/bin/" || \
+            cp "guardian-components/${component}/target/release/${component//-/_}" "${DEB_DIR}/usr/bin/${component}" || true
+            
+            # Control file
+            cat > "${DEB_DIR}/DEBIAN/control" << EOF
+          Package: ${component}
+          Version: ${VERSION}
+          Section: misc
+          Priority: optional
+          Architecture: amd64
+          Depends: libssl3, libsqlite3-0
+          Maintainer: Guardian OS Team <support@gameguardian.ai>
+          Description: ${component} - Guardian OS component
+           AI Powered Protection For Families.
+          EOF
+            
+            # Build .deb
+            dpkg-deb --build "${DEB_DIR}"
+          done
+      
+      - name: Upload component artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: guardian-packages
+          path: packages/*.deb
+
+  build-iso:
+    name: Build ISO
+    needs: build-components
+    runs-on: ubuntu-24.04
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Download component packages
+        uses: actions/download-artifact@v4
+        with:
+          name: guardian-packages
+          path: packages/
+      
+      - name: Install ISO build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            debootstrap \
+            squashfs-tools \
+            xorriso \
+            grub-pc-bin \
+            grub-efi-amd64-bin \
+            mtools \
+            dosfstools \
+            imagemagick \
+            librsvg2-bin
+      
+      - name: Convert branding assets
+        run: |
+          cd branding
+          chmod +x convert-assets.sh
+          ./convert-assets.sh
+      
+      - name: Clone Pop!_OS ISO builder
+        run: |
+          git clone https://github.com/AugustArnstad/pop-os-cosmic-iso-builder.git iso-builder-upstream
+      
+      - name: Apply Guardian customizations
+        run: |
+          # Copy config
+          cp -r iso-builder/config/* iso-builder-upstream/
+          
+          # Copy branding
+          mkdir -p iso-builder-upstream/branding
+          cp -r branding/* iso-builder-upstream/branding/
+          
+          # Copy packages
+          mkdir -p iso-builder-upstream/packages
+          cp packages/*.deb iso-builder-upstream/packages/
+      
+      - name: Build ISO
+        run: |
+          cd iso-builder-upstream
+          chmod +x build.sh
+          sudo ./build.sh
+      
+      - name: Rename ISO
+        run: |
+          VERSION=${{ github.event.inputs.version || '1.0.0' }}
+          mv iso-builder-upstream/*.iso guardian-os-${VERSION}-amd64.iso
+      
+      - name: Upload ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: guardian-os-iso
+          path: guardian-os-*.iso
+
+  release:
+    name: Create Release
+    needs: build-iso
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - name: Download ISO
+        uses: actions/download-artifact@v4
+        with:
+          name: guardian-os-iso
+      
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: guardian-packages
+          path: packages/
+      
+      - name: Create checksums
+        run: |
+          sha256sum guardian-os-*.iso > SHA256SUMS
+          sha256sum packages/*.deb >> SHA256SUMS
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Guardian OS ${{ github.ref_name }}
+          body: |
+            ## 🛡️ Guardian OS ${{ github.ref_name }}
+            
+            **AI Powered Protection For Families**
+            
+            ### Downloads
+            - `guardian-os-*-amd64.iso` - Bootable installation ISO
+            - Individual `.deb` packages for manual installation
+            
+            ### Installation
+            1. Download the ISO
+            2. Create bootable USB with [Balena Etcher](https://etcher.balena.io/)
+            3. Boot from USB and follow the installer
+            4. Complete Guardian Setup Wizard on first login
+            
+            ### What's Included
+            - Pop!_OS 24.04 with COSMIC desktop
+            - guardian-daemon - Core safety service
+            - guardian-wizard - First-boot setup
+            - guardian-settings - Parental controls
+            - guardian-store - Family-safe app store
+            
+            ### Checksums
+            See `SHA256SUMS` file for verification.
+          files: |
+            guardian-os-*.iso
+            packages/*.deb
+            SHA256SUMS
+          draft: false
+          prerelease: false

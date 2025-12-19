@@ -1,0 +1,12 @@
+#!/usr/bin/expect -f
+set timeout 30
+spawn ssh -o StrictHostKeyChecking=no root@192.248.163.171
+expect "password:"
+send "j?Q9qZ9\]Y##qpafr\r"
+expect "# "
+send "docker ps\r"
+expect "# "
+send "free -h\r"
+expect "# "
+send "exit\r"
+expect eof

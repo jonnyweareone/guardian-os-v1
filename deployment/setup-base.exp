@@ -1,0 +1,31 @@
+#!/usr/bin/expect -f
+set timeout 600
+
+spawn ssh -o StrictHostKeyChecking=no root@192.248.163.171
+expect "password:"
+send "j?Q9qZ9\]Y##qpafr\r"
+expect "# "
+
+# Update and install Docker
+send "apt-get update -y && apt-get install -y curl git\r"
+expect "# " 
+
+send "curl -fsSL https://get.docker.com | sh\r"
+expect "# "
+
+send "apt-get install -y docker-compose-plugin ufw\r"
+expect "# "
+
+# Firewall
+send "ufw default deny incoming && ufw default allow outgoing && ufw allow ssh && ufw allow 80/tcp && ufw allow 443/tcp && ufw allow 50051/tcp && ufw --force enable\r"
+expect "# "
+
+# Create directory structure
+send "mkdir -p /opt/guardian-sync/init-db\r"
+expect "# "
+
+send "echo 'BASE SETUP COMPLETE'\r"
+expect "# "
+
+send "exit\r"
+expect eof

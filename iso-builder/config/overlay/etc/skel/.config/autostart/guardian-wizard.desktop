@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Guardian Setup
+Comment=First-time Guardian OS setup wizard
+Exec=/usr/bin/guardian-wizard
+Icon=guardian-shield
+Terminal=false
+Categories=System;Settings;
+X-GNOME-Autostart-enabled=true
+OnlyShowIn=COSMIC;GNOME;

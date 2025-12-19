@@ -1,0 +1,13 @@
+# Guardian OS - Packages to Remove
+# These packages are removed from the base Pop!_OS installation
+
+# Pop!_OS branding (replaced with Guardian)
+pop-wallpapers
+pop-fonts
+pop-icon-theme
+pop-gtk-theme
+
+# Not needed for kids' gaming PC
+# (uncomment to remove)
+# libreoffice-*
+# thunderbird

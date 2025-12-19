@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Guardian OS
+Description=Guardian OS boot splash with animated shield
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/guardian
+ScriptFile=/usr/share/plymouth/themes/guardian/guardian.script

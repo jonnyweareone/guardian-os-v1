@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+package guardian.sync.v1;
+
+// ============================================================================
+// File Sync Service - Wallpapers, configs, documents
+// ============================================================================
+
+service FileService {
+  // Upload file
+  rpc UploadFile(stream UploadFileRequest) returns (UploadFileResponse);
+  
+  // Download file
+  rpc DownloadFile(DownloadFileRequest) returns (stream DownloadFileResponse);
+  
+  // List files
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+  
+  // Get file metadata
+  rpc GetFileMetadata(GetFileMetadataRequest) returns (FileMetadata);
+  
+  // Delete file
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  
+  // Get presigned URL for direct S3 upload/download
+  rpc GetPresignedUrl(GetPresignedUrlRequest) returns (GetPresignedUrlResponse);
+}
+
+// File types
+enum FileType {
+  FILE_TYPE_UNSPECIFIED = 0;
+  FILE_TYPE_WALLPAPER = 1;
+  FILE_TYPE_THEME = 2;
+  FILE_TYPE_CONFIG = 3;
+  FILE_TYPE_ICON_PACK = 4;
+  FILE_TYPE_FONT = 5;
+  FILE_TYPE_DOCUMENT = 6;
+}
+
+// Upload
+message UploadFileRequest {
+  oneof data {
+    FileUploadHeader header = 1;
+    bytes chunk = 2;
+  }
+}
+
+message FileUploadHeader {
+  string filename = 1;
+  FileType file_type = 2;
+  int64 size = 3;
+  string content_type = 4;
+  string checksum_sha256 = 5;
+  map<string, string> metadata = 6;
+}
+
+message UploadFileResponse {
+  string file_id = 1;
+  string storage_path = 2;
+  int64 uploaded_at = 3;
+}
+
+// Download
+message DownloadFileRequest {
+  string file_id = 1;
+  int64 offset = 2;  // For resumable downloads
+}
+
+message DownloadFileResponse {
+  oneof data {
+    FileMetadata metadata = 1;
+    bytes chunk = 2;
+  }
+}
+
+// List Files
+message ListFilesRequest {
+  FileType file_type = 1;  // Filter by type, 0 = all
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message ListFilesResponse {
+  repeated FileMetadata files = 1;
+  string next_cursor = 2;
+  int32 total_count = 3;
+}
+
+// File Metadata
+message GetFileMetadataRequest {
+  string file_id = 1;
+}
+
+message FileMetadata {
+  string file_id = 1;
+  string filename = 2;
+  FileType file_type = 3;
+  int64 size = 4;
+  string content_type = 5;
+  string checksum_sha256 = 6;
+  int64 created_at = 7;
+  int64 updated_at = 8;
+  map<string, string> metadata = 9;
+}
+
+// Delete
+message DeleteFileRequest {
+  string file_id = 1;
+}
+
+message DeleteFileResponse {
+  bool success = 1;
+}
+
+// Presigned URL
+message GetPresignedUrlRequest {
+  string file_id = 1;        // For download
+  FileUploadHeader header = 2; // For upload (new file)
+  UrlOperation operation = 3;
+  int32 expires_in_seconds = 4;
+}
+
+enum UrlOperation {
+  URL_OPERATION_UNSPECIFIED = 0;
+  URL_OPERATION_UPLOAD = 1;
+  URL_OPERATION_DOWNLOAD = 2;
+}
+
+message GetPresignedUrlResponse {
+  string url = 1;
+  string file_id = 2;
+  int64 expires_at = 3;
+  map<string, string> required_headers = 4;
+}

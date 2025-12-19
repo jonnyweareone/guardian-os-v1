@@ -1,0 +1,47 @@
+[package]
+name = "guardian-wizard"
+version = "0.1.0"
+edition = "2021"
+authors = ["Guardian Network Solutions"]
+description = "First-boot setup wizard for Guardian OS"
+license = "GPL-3.0"
+repository = "https://github.com/guardian-network/guardian-os"
+
+[dependencies]
+# COSMIC/Iced UI framework
+iced = { version = "0.12", features = ["tokio", "svg", "image"] }
+cosmic-theme = { git = "https://github.com/pop-os/libcosmic", branch = "master" }
+
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+
+# HTTP client for Supabase
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# System info
+sysinfo = "0.31"
+hostname = "0.4"
+
+# QR code generation (for mobile app pairing)
+qrcode = "0.14"
+image = "0.25"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# UUID
+uuid = { version = "1.10", features = ["v4"] }
+
+[profile.release]
+lto = true
+strip = true

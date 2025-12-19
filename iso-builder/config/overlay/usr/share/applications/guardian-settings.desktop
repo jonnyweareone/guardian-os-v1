@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Guardian Settings
+Comment=Parental controls and family settings
+Exec=/usr/bin/guardian-settings
+Icon=guardian-shield
+Terminal=false
+Categories=System;Settings;Security;
+Keywords=parental;control;family;safety;guardian;

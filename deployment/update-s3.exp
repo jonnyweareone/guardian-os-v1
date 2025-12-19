@@ -1,0 +1,18 @@
+#!/usr/bin/expect -f
+set timeout 30
+spawn ssh -o StrictHostKeyChecking=no root@192.248.163.171
+expect "password:"
+send "j?Q9qZ9\]Y##qpafr\r"
+expect "# "
+send "cd /opt/guardian-sync && sed -i 's|S3_REGION=ewr1|S3_REGION=eu-west-1|g' .env\r"
+expect "# "
+send "sed -i 's|S3_ENDPOINT=https://ewr1.vultrobjects.com|S3_ENDPOINT=https://s3.eu-west-1.peasoup.cloud|g' .env\r"
+expect "# "
+send "sed -i 's|S3_ACCESS_KEY=CONFIGURE_LATER|S3_ACCESS_KEY=PN29S8ZM3Q4LSAIK93V4|g' .env\r"
+expect "# "
+send "sed -i 's|S3_SECRET_KEY=CONFIGURE_LATER|S3_SECRET_KEY=bWnW9hQFmAR7rigvwDvSvP1BT13ba9Mv6GX9DFIb|g' .env\r"
+expect "# "
+send "cat .env\r"
+expect "# "
+send "exit\r"
+expect eof

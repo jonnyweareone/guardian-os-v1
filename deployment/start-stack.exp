@@ -1,0 +1,28 @@
+#!/usr/bin/expect -f
+set timeout 300
+
+spawn ssh -o StrictHostKeyChecking=no root@192.248.163.171
+expect "password:"
+send "j?Q9qZ9\]Y##qpafr\r"
+expect "# "
+
+send "cd /opt/guardian-sync && docker compose pull\r"
+expect "# "
+
+send "docker compose up -d\r"
+expect "# "
+
+send "sleep 15\r"
+expect "# "
+
+send "docker compose ps\r"
+expect "# "
+
+send "docker compose logs --tail=30\r"
+expect "# "
+
+send "free -h && df -h\r"
+expect "# "
+
+send "exit\r"
+expect eof

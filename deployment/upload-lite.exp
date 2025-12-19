@@ -1,0 +1,7 @@
+#!/usr/bin/expect -f
+set timeout 60
+
+spawn scp -o StrictHostKeyChecking=no /Users/davidsmith/Documents/GitHub/guardian-os-v1/deployment/docker-compose-lite.yml root@192.248.163.171:/opt/guardian-sync/docker-compose.yml
+expect "password:"
+send "j?Q9qZ9\]Y##qpafr\r"
+expect eof

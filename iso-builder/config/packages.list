@@ -1,0 +1,23 @@
+# Guardian OS - Additional Packages
+# These packages are installed in addition to Pop!_OS COSMIC base
+
+# Guardian Components (from local .deb or PPA)
+guardian-daemon
+guardian-wizard
+guardian-settings
+guardian-store
+
+# Flatpak (for guardian-store)
+flatpak
+
+# Dependencies
+libsqlite3-0
+libssl3
+
+# Fonts
+fonts-inter
+
+# Utilities
+curl
+wget
+jq

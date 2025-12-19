@@ -21,11 +21,21 @@ repo/db/
 repo/dists/
 repo/pool/
 repo/incoming/
+iso-build/
+iso-output/
+
+# Upstream cloned repos (reference only)
+upstream/
 
 # Assets (downloaded)
 assets/*.png
 assets/*.jpg
 assets/*.svg
+
+# Rust build artifacts
+target/
+**/target/
+Cargo.lock
 
 # Temporary files
 *.tmp
@@ -57,3 +67,6 @@ assets/*.svg
 # System files
 .directory
 Thumbs.db
+
+# Converted PNG assets (generated from SVG)
+branding/*/png/

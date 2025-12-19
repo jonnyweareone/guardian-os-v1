@@ -1,0 +1,103 @@
+version: '3.8'
+
+# Guardian Sync Server - Production Stack (Lite)
+# Vultr VPS: 1 vCPU / 1GB RAM - Start DB + Redis only
+
+networks:
+  guardian-net:
+    driver: bridge
+
+volumes:
+  mariadb-data:
+  redis-data:
+  traefik-certs:
+
+services:
+  # ===========================================
+  # TRAEFIK - Reverse Proxy + TLS
+  # ===========================================
+  traefik:
+    image: traefik:v3.0
+    container_name: guardian-traefik
+    restart: unless-stopped
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.grpc.address=:50051"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/certs/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=guardian-net"
+      - "--log.level=INFO"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "50051:50051"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certs:/certs
+    networks:
+      - guardian-net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ===========================================
+  # MARIADB - Primary Database
+  # ===========================================
+  mariadb:
+    image: mariadb:11.2
+    container_name: guardian-mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASS}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+    networks:
+      - guardian-net
+    ports:
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  # ===========================================
+  # REDIS - Cache + Sessions
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: guardian-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes --maxmemory 64mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - guardian-net
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 96M

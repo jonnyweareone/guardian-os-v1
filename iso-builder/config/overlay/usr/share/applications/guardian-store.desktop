@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Guardian Store
+Comment=Family-safe app store
+Exec=/usr/bin/guardian-store
+Icon=guardian-store
+Terminal=false
+Categories=System;PackageManager;
+Keywords=apps;store;install;software;guardian;

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="grubBg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" style="stop-color:#0d1117;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#010409;stop-opacity:1" />
+    </radialGradient>
+    <linearGradient id="accentLine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:transparent;stop-opacity:0" />
+      <stop offset="50%" style="stop-color:#00E5FF;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:transparent;stop-opacity:0" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1920" height="1080" fill="url(#grubBg)"/>
+  
+  <!-- Subtle grid -->
+  <pattern id="grubGrid" width="80" height="80" patternUnits="userSpaceOnUse">
+    <path d="M 80 0 L 0 0 0 80" fill="none" stroke="rgba(0,229,255,0.02)" stroke-width="1"/>
+  </pattern>
+  <rect width="1920" height="1080" fill="url(#grubGrid)"/>
+  
+  <!-- Accent lines -->
+  <rect x="0" y="200" width="1920" height="1" fill="url(#accentLine)"/>
+  <rect x="0" y="880" width="1920" height="1" fill="url(#accentLine)"/>
+  
+  <!-- Corner decorations -->
+  <path d="M30 30 L30 80 M30 30 L80 30" stroke="rgba(0,229,255,0.15)" stroke-width="2" fill="none"/>
+  <path d="M1890 30 L1890 80 M1890 30 L1840 30" stroke="rgba(0,229,255,0.15)" stroke-width="2" fill="none"/>
+  <path d="M30 1050 L30 1000 M30 1050 L80 1050" stroke="rgba(0,229,255,0.15)" stroke-width="2" fill="none"/>
+  <path d="M1890 1050 L1890 1000 M1890 1050 L1840 1050" stroke="rgba(0,229,255,0.15)" stroke-width="2" fill="none"/>
+  
+  <!-- Very subtle center glow -->
+  <ellipse cx="960" cy="350" rx="400" ry="200" fill="rgba(0,229,255,0.02)"/>
+</svg>

@@ -1,0 +1,66 @@
+[package]
+name = "guardian-daemon"
+version = "0.1.0"
+edition = "2021"
+authors = ["Guardian Network Solutions"]
+description = "AI-powered safety daemon for Guardian OS"
+license = "GPL-3.0"
+repository = "https://github.com/guardian-network/guardian-os"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+
+# Configuration
+config = "0.14"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+dirs = "5.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# D-Bus for desktop integration
+zbus = "4.4"
+
+# gRPC client for sync server
+tonic = "0.12"
+prost = "0.13"
+
+# HTTP client for Supabase API calls
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+
+# Database (local SQLite for offline cache)
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Process monitoring
+sysinfo = "0.31"
+
+# File system watching
+notify = "6.1"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# UUID generation
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# Encryption
+ring = "0.17"
+
+# Hostname
+hostname = "0.4"
+
+[build-dependencies]
+tonic-build = "0.12"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

@@ -1,0 +1,108 @@
+# Guardian OS GRUB Theme
+# Dark theme with cyan accents matching GameGuardian.ai branding
+
+# ============================================
+# Global Settings
+# ============================================
+
+title-text: ""
+title-font: "Inter Regular 16"
+title-color: "#ffffff"
+desktop-image: "background.png"
+desktop-color: "#010409"
+terminal-font: "Terminus Regular 14"
+terminal-box: "terminal_box_*.png"
+terminal-left: "0"
+terminal-top: "0"
+terminal-width: "100%"
+terminal-height: "100%"
+terminal-border: "0"
+
+# ============================================
+# Boot Menu
+# ============================================
+
++ boot_menu {
+    left = 50%-250
+    top = 50%-150
+    width = 500
+    height = 300
+    
+    item_font = "Inter Regular 16"
+    item_color = "#a0a0a0"
+    item_height = 40
+    item_padding = 15
+    item_spacing = 10
+    
+    selected_item_font = "Inter Bold 16"
+    selected_item_color = "#00E5FF"
+    selected_item_pixmap_style = "select_*.png"
+    
+    icon_width = 32
+    icon_height = 32
+    item_icon_space = 15
+    
+    scrollbar = true
+    scrollbar_width = 6
+    scrollbar_thumb = "scrollbar_thumb_*.png"
+    scrollbar_frame = "scrollbar_frame_*.png"
+}
+
+# ============================================
+# Progress Bar (for timeout)
+# ============================================
+
++ progress_bar {
+    id = "__timeout__"
+    left = 50%-150
+    top = 50%+180
+    width = 300
+    height = 8
+    
+    bg_color = "#1a1a2e"
+    fg_color = "#00E5FF"
+    border_color = "#00B8D4"
+    
+    highlight_style = "highlight_*.png"
+    highlight_overlay = true
+}
+
+# ============================================
+# Labels
+# ============================================
+
++ label {
+    left = 50%-200
+    top = 50%-220
+    width = 400
+    align = "center"
+    id = "__timeout__"
+    text = "Starting Guardian OS in %d seconds..."
+    font = "Inter Regular 12"
+    color = "#666666"
+}
+
++ label {
+    left = 50%-200
+    top = 100%-50
+    width = 400
+    align = "center"
+    text = "Guardian OS - Intelligent Gaming Protection"
+    font = "Inter Regular 11"
+    color = "#444444"
+}
+
+# ============================================
+# Hbox for logo placement
+# ============================================
+
++ hbox {
+    left = 50%-100
+    top = 50%-350
+    width = 200
+    height = 120
+    
+    + image {
+        file = "guardian-logo.png"
+    }
+}

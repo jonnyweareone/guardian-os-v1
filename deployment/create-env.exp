@@ -1,0 +1,42 @@
+#!/usr/bin/expect -f
+set timeout 120
+
+spawn ssh -o StrictHostKeyChecking=no root@192.248.163.171
+expect "password:"
+send "j?Q9qZ9\]Y##qpafr\r"
+expect "# "
+
+# Generate passwords and create .env
+send "cd /opt/guardian-sync && cat > .env << 'ENVEOF'\n"
+send "DOMAIN=guardian-os.net\n"
+send "ACME_EMAIL=admin@guardian-os.net\n"
+send "\n"
+send "DB_ROOT_PASSWORD=GuardianRoot2025Secure\n"
+send "DB_NAME=guardian_sync\n"
+send "DB_USER=guardian\n"
+send "DB_PASS=GuardianDB2025Pass\n"
+send "\n"
+send "REDIS_PASSWORD=GuardianRedis2025Key\n"
+send "\n"
+send "S3_REGION=ewr1\n"
+send "S3_BUCKET=guardian-sync-files\n"
+send "S3_ENDPOINT=https://ewr1.vultrobjects.com\n"
+send "S3_ACCESS_KEY=CONFIGURE_LATER\n"
+send "S3_SECRET_KEY=CONFIGURE_LATER\n"
+send "\n"
+send "OAUTH_CLIENT_ID=CONFIGURE_LATER\n"
+send "OAUTH_CLIENT_SECRET=CONFIGURE_LATER\n"
+send "OAUTH_AUTH_URL=https://accounts.google.com/o/oauth2/v2/auth\n"
+send "OAUTH_TOKEN_URL=https://oauth2.googleapis.com/token\n"
+send "OAUTH_USER_INFO_URL=https://openidconnect.googleapis.com/v1/userinfo\n"
+send "ENVEOF\r"
+expect "# "
+
+send "cat .env\r"
+expect "# "
+
+send "ls -la /opt/guardian-sync/\r"
+expect "# "
+
+send "exit\r"
+expect eof

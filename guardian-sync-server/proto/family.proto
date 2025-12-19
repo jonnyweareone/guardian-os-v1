@@ -1,0 +1,280 @@
+syntax = "proto3";
+
+package guardian.sync.v1;
+
+// ============================================================================
+// Family Service - Parental controls and family management
+// ============================================================================
+
+service FamilyService {
+  // Create a family group
+  rpc CreateFamily(CreateFamilyRequest) returns (CreateFamilyResponse);
+  
+  // Get family details
+  rpc GetFamily(GetFamilyRequest) returns (Family);
+  
+  // Invite member to family
+  rpc InviteMember(InviteMemberRequest) returns (InviteMemberResponse);
+  
+  // Accept family invitation
+  rpc AcceptInvitation(AcceptInvitationRequest) returns (AcceptInvitationResponse);
+  
+  // Remove member from family
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+  
+  // Add child profile
+  rpc AddChild(AddChildRequest) returns (AddChildResponse);
+  
+  // Update child profile
+  rpc UpdateChild(UpdateChildRequest) returns (UpdateChildResponse);
+  
+  // Remove child
+  rpc RemoveChild(RemoveChildRequest) returns (RemoveChildResponse);
+  
+  // Link device to child
+  rpc LinkDeviceToChild(LinkDeviceToChildRequest) returns (LinkDeviceToChildResponse);
+  
+  // Get child's devices
+  rpc GetChildDevices(GetChildDevicesRequest) returns (GetChildDevicesResponse);
+  
+  // Set screen time rules
+  rpc SetScreenTimeRules(SetScreenTimeRulesRequest) returns (SetScreenTimeRulesResponse);
+  
+  // Get screen time rules
+  rpc GetScreenTimeRules(GetScreenTimeRulesRequest) returns (ScreenTimeRules);
+  
+  // Get screen time usage
+  rpc GetScreenTimeUsage(GetScreenTimeUsageRequest) returns (GetScreenTimeUsageResponse);
+  
+  // Set content filters
+  rpc SetContentFilters(SetContentFiltersRequest) returns (SetContentFiltersResponse);
+  
+  // Get content filters
+  rpc GetContentFilters(GetContentFiltersRequest) returns (ContentFilters);
+  
+  // Approve app request
+  rpc ApproveAppRequest(ApproveAppRequestRequest) returns (ApproveAppRequestResponse);
+}
+
+// Family
+message CreateFamilyRequest {
+  string name = 1;
+}
+
+message CreateFamilyResponse {
+  string family_id = 1;
+  string invite_code = 2;
+}
+
+message GetFamilyRequest {
+  string family_id = 1;
+}
+
+message Family {
+  string family_id = 1;
+  string name = 2;
+  string owner_id = 3;
+  repeated FamilyMember members = 4;
+  repeated Child children = 5;
+  int64 created_at = 6;
+}
+
+message FamilyMember {
+  string account_id = 1;
+  string email = 2;
+  string display_name = 3;
+  FamilyRole role = 4;
+  int64 joined_at = 5;
+}
+
+enum FamilyRole {
+  FAMILY_ROLE_UNSPECIFIED = 0;
+  FAMILY_ROLE_OWNER = 1;
+  FAMILY_ROLE_ADMIN = 2;
+  FAMILY_ROLE_MEMBER = 3;
+}
+
+// Invitations
+message InviteMemberRequest {
+  string family_id = 1;
+  string email = 2;
+  FamilyRole role = 3;
+}
+
+message InviteMemberResponse {
+  string invitation_id = 1;
+  string invite_code = 2;
+  int64 expires_at = 3;
+}
+
+message AcceptInvitationRequest {
+  string invite_code = 1;
+}
+
+message AcceptInvitationResponse {
+  string family_id = 1;
+  bool success = 2;
+}
+
+message RemoveMemberRequest {
+  string family_id = 1;
+  string account_id = 2;
+}
+
+message RemoveMemberResponse {
+  bool success = 1;
+}
+
+// Children
+message Child {
+  string child_id = 1;
+  string name = 2;
+  string avatar_url = 3;
+  int32 age = 4;
+  int64 created_at = 5;
+}
+
+message AddChildRequest {
+  string family_id = 1;
+  string name = 2;
+  int32 age = 3;
+}
+
+message AddChildResponse {
+  string child_id = 1;
+}
+
+message UpdateChildRequest {
+  string child_id = 1;
+  string name = 2;
+  int32 age = 3;
+  string avatar_url = 4;
+}
+
+message UpdateChildResponse {
+  bool success = 1;
+}
+
+message RemoveChildRequest {
+  string child_id = 1;
+}
+
+message RemoveChildResponse {
+  bool success = 1;
+}
+
+// Device linking
+message LinkDeviceToChildRequest {
+  string child_id = 1;
+  string device_id = 2;
+}
+
+message LinkDeviceToChildResponse {
+  bool success = 1;
+}
+
+message GetChildDevicesRequest {
+  string child_id = 1;
+}
+
+message GetChildDevicesResponse {
+  repeated ChildDevice devices = 1;
+}
+
+message ChildDevice {
+  string device_id = 1;
+  string device_name = 2;
+  int64 last_seen = 3;
+  bool is_online = 4;
+}
+
+// Screen Time
+message SetScreenTimeRulesRequest {
+  string child_id = 1;
+  ScreenTimeRules rules = 2;
+}
+
+message SetScreenTimeRulesResponse {
+  bool success = 1;
+}
+
+message GetScreenTimeRulesRequest {
+  string child_id = 1;
+}
+
+message ScreenTimeRules {
+  int32 daily_limit_minutes = 1;
+  repeated DaySchedule schedule = 2;
+  bool enabled = 3;
+}
+
+message DaySchedule {
+  int32 day_of_week = 1;  // 0=Sunday, 6=Saturday
+  int32 start_hour = 2;
+  int32 start_minute = 3;
+  int32 end_hour = 4;
+  int32 end_minute = 5;
+}
+
+message GetScreenTimeUsageRequest {
+  string child_id = 1;
+  int64 from_date = 2;
+  int64 to_date = 3;
+}
+
+message GetScreenTimeUsageResponse {
+  repeated DailyUsage usage = 1;
+  int32 total_minutes = 2;
+}
+
+message DailyUsage {
+  int64 date = 1;
+  int32 minutes_used = 2;
+  repeated AppUsage app_usage = 3;
+}
+
+message AppUsage {
+  string app_id = 1;
+  string app_name = 2;
+  int32 minutes = 3;
+}
+
+// Content Filters
+message SetContentFiltersRequest {
+  string child_id = 1;
+  ContentFilters filters = 2;
+}
+
+message SetContentFiltersResponse {
+  bool success = 1;
+}
+
+message GetContentFiltersRequest {
+  string child_id = 1;
+}
+
+message ContentFilters {
+  bool safe_search = 1;
+  repeated string blocked_sites = 2;
+  repeated string allowed_sites = 3;
+  repeated string blocked_apps = 4;
+  ContentLevel content_level = 5;
+}
+
+enum ContentLevel {
+  CONTENT_LEVEL_UNSPECIFIED = 0;
+  CONTENT_LEVEL_CHILD = 1;      // Age 0-8
+  CONTENT_LEVEL_PRETEEN = 2;    // Age 9-12
+  CONTENT_LEVEL_TEEN = 3;       // Age 13-17
+  CONTENT_LEVEL_UNRESTRICTED = 4;
+}
+
+// App Requests
+message ApproveAppRequestRequest {
+  string request_id = 1;
+  bool approved = 2;
+}
+
+message ApproveAppRequestResponse {
+  bool success = 1;
+}
