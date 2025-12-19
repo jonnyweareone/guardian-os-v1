@@ -15,7 +15,7 @@ PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 # Configuration
 POP_VERSION="24.04"
-POP_ISO_URL="https://iso.pop-os.org/24.04/amd64/intel/40/pop-os_24.04_amd64_intel_40.iso"
+POP_ISO_URL="https://iso.pop-os.org/24.04/amd64/intel/20/pop-os_24.04_amd64_intel_20.iso"
 GUARDIAN_VERSION="1.0.0"
 GITHUB_RELEASE_URL="https://github.com/jonnyweareone/guardian-os-v1/releases/download/v${GUARDIAN_VERSION}"
 
