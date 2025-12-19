@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use reqwest::Url;
 
 /// Types of activity that can be tracked
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -113,16 +114,31 @@ pub struct CategoryTimeSummary {
     pub percentage: f32,
 }
 
+/// Exported struct for activity logging
+pub struct ActivityLog;
+
+impl ActivityLog {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for ActivityLog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ActivityEvent {
     /// Create a new URL visit event
     pub fn url_visit(
         device_id: &str,
         child_id: Option<&str>,
-        url: &str,
+        url_str: &str,
         title: Option<&str>,
         browser: &str,
     ) -> Self {
-        let domain = url::Url::parse(url)
+        let domain = Url::parse(url_str)
             .map(|u| u.host_str().unwrap_or("unknown").to_string())
             .unwrap_or_else(|_| "unknown".to_string());
         
@@ -133,7 +149,7 @@ impl ActivityEvent {
             activity_type: ActivityType::UrlVisit,
             timestamp: Utc::now(),
             data: serde_json::json!({
-                "url": url,
+                "url": url_str,
                 "title": title,
                 "domain": domain,
                 "browser": browser,

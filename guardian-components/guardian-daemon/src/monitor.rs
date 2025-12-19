@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 use std::time::Duration;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use sysinfo::{System, ProcessExt, SystemExt};
+use sysinfo::System;
 use tokio::time::interval;
 use tracing::{info, debug, warn};
 use anyhow::Result;
@@ -27,7 +27,7 @@ impl ActivityMonitor {
     }
     
     /// Main monitoring loop
-    pub async fn run(&self) -> Result<()> {
+    pub async fn run(mut self) -> Result<()> {
         let check_interval = Duration::from_secs(
             self.state.config.screen_time_check_interval_secs
         );

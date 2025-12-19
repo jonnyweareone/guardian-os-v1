@@ -1,7 +1,7 @@
 //! Safety rules - defines content filtering and screen time rules
 
 use serde::{Deserialize, Serialize};
-use chrono::NaiveTime;
+use chrono::{NaiveTime, Datelike};
 
 /// Complete safety rules for a child profile
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

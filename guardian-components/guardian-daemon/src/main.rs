@@ -124,12 +124,13 @@ impl AppState {
     /// Send heartbeat to Supabase
     pub async fn send_heartbeat(&self) -> anyhow::Result<()> {
         if let Some(ref device_id) = self.config.device_id {
-            let sys = sysinfo::System::new_all();
+            let mut sys = sysinfo::System::new_all();
+            sys.refresh_all();
             
             let heartbeat = supabase::DeviceHeartbeat {
                 device_id: device_id.clone(),
                 ip_address: get_local_ip(),
-                cpu_percent: Some(sys.global_cpu_info().cpu_usage()),
+                cpu_percent: Some(sys.global_cpu_usage()),
                 memory_percent: Some((sys.used_memory() as f32 / sys.total_memory() as f32) * 100.0),
                 disk_percent: None, // TODO: Get disk usage
                 active_app: None, // TODO: Get from monitor
@@ -208,7 +209,7 @@ fn get_local_ip() -> Option<String> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize logging
-    let subscriber = FmtSubscriber::builder()
+    let _subscriber = FmtSubscriber::builder()
         .with_max_level(Level::INFO)
         .with_target(false)
         .init();
@@ -230,7 +231,7 @@ async fn main() -> anyhow::Result<()> {
     
     // Start the activity monitor
     let monitor_state = Arc::clone(&state);
-    let monitor_handle = tokio::spawn(async move {
+    let _monitor_handle = tokio::spawn(async move {
         let monitor = ActivityMonitor::new(monitor_state);
         if let Err(e) = monitor.run().await {
             error!("Activity monitor error: {}", e);
@@ -239,7 +240,7 @@ async fn main() -> anyhow::Result<()> {
     
     // Start D-Bus service for browser integration
     let dbus_state = Arc::clone(&state);
-    let dbus_handle = tokio::spawn(async move {
+    let _dbus_handle = tokio::spawn(async move {
         if let Err(e) = dbus::run_dbus_service(dbus_state).await {
             error!("D-Bus service error: {}", e);
         }

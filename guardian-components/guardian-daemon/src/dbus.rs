@@ -4,6 +4,7 @@ use std::sync::Arc;
 use zbus::{Connection, interface, fdo};
 use tracing::{info, debug, error};
 use anyhow::Result;
+use reqwest::Url;
 
 use crate::AppState;
 use crate::activity::ActivityEvent;
@@ -27,7 +28,7 @@ impl GuardianDbusService {
         
         // Check if URL should be blocked
         let rules = self.state.rules.read().await;
-        let domain = url::Url::parse(&url)
+        let domain = Url::parse(&url)
             .map(|u| u.host_str().unwrap_or("unknown").to_string())
             .unwrap_or_else(|_| "unknown".to_string());
         
