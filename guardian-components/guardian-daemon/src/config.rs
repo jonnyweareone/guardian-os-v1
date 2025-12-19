@@ -196,8 +196,7 @@ fn generate_hardware_id() -> String {
 pub fn get_supabase_anon_key() -> String {
     std::env::var("GUARDIAN_SUPABASE_ANON_KEY")
         .unwrap_or_else(|_| {
-            // This will be baked into the binary at build time
-            // In production, use a build script to embed this
-            include_str!("../supabase_anon_key.txt").trim().to_string()
+            // Public Supabase anon key - safe to embed (read-only public access)
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdreXNwdmNhZnl0dGZoeWpyeXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxMDIzMzQsImV4cCI6MjA4MTY3ODMzNH0.Ns5N9Y9uZgWqdhnYiX5IrubOO-Xopl2urBDR1AVD7FI".to_string()
         })
 }
