@@ -1,4 +1,9 @@
 //! API client for Guardian Wizard
+//!
+//! Communicates with Guardian Supabase backend for:
+//! - Parent authentication
+//! - Family/children data fetching
+//! - Device registration and activation
 
 use anyhow::{Result, Context};
 use reqwest::Client;
@@ -171,6 +176,65 @@ impl GuardianApi {
         })
     }
     
+    /// Fetch the family for the currently authenticated user
+    pub async fn fetch_family_for_user(&self, user_id: &str) -> Result<FamilyInfo> {
+        // Get family membership for this user
+        let resp = self.client
+            .get(&format!(
+                "{}/rest/v1/family_members?select=family_id,families(id,name,invite_code)&profile_id=eq.{}",
+                SUPABASE_URL, user_id
+            ))
+            .header("apikey", SUPABASE_ANON_KEY)
+            .header("Authorization", self.auth_header())
+            .send()
+            .await
+            .context("Failed to fetch family membership")?;
+        
+        if !resp.status().is_success() {
+            anyhow::bail!("Failed to fetch family: {}", resp.status());
+        }
+        
+        let records: Vec<FamilyMemberRecord> = resp.json().await?;
+        let record = records.into_iter().next()
+            .ok_or_else(|| anyhow::anyhow!("No family found for this user"))?;
+        
+        let family = record.families
+            .ok_or_else(|| anyhow::anyhow!("Family data not returned"))?;
+        
+        Ok(FamilyInfo {
+            id: family.id,
+            name: family.name,
+            invite_code: family.invite_code,
+        })
+    }
+    
+    /// Fetch children for a specific family
+    pub async fn fetch_children(&self, family_id: &str) -> Result<Vec<ChildInfo>> {
+        let resp = self.client
+            .get(&format!(
+                "{}/rest/v1/children?select=id,name,date_of_birth,avatar_url&family_id=eq.{}&order=name.asc",
+                SUPABASE_URL, family_id
+            ))
+            .header("apikey", SUPABASE_ANON_KEY)
+            .header("Authorization", self.auth_header())
+            .send()
+            .await
+            .context("Failed to fetch children")?;
+        
+        if !resp.status().is_success() {
+            anyhow::bail!("Failed to fetch children: {}", resp.status());
+        }
+        
+        let records: Vec<ChildRecord> = resp.json().await?;
+        
+        Ok(records.into_iter().map(|r| ChildInfo {
+            id: r.id,
+            name: r.name,
+            date_of_birth: r.date_of_birth,
+            avatar_url: r.avatar_url,
+        }).collect())
+    }
+    
     /// Create a new family
     pub async fn create_family(&self, name: &str) -> Result<FamilyInfo> {
         let resp = self.client
@@ -222,6 +286,38 @@ impl GuardianApi {
             name: family.name,
             invite_code: family.invite_code,
         })
+    }
+    
+    /// Assign device to a child and activate it
+    pub async fn activate_device_for_child(
+        &self, 
+        device_id: &str, 
+        child_id: &str, 
+        family_id: &str
+    ) -> Result<()> {
+        let resp = self.client
+            .patch(&format!(
+                "{}/rest/v1/devices?id=eq.{}",
+                SUPABASE_URL, device_id
+            ))
+            .header("apikey", SUPABASE_ANON_KEY)
+            .header("Authorization", self.auth_header())
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "child_id": child_id,
+                "family_id": family_id,
+                "status": "active",
+                "activated_at": chrono::Utc::now().to_rfc3339(),
+            }))
+            .send()
+            .await
+            .context("Failed to activate device")?;
+        
+        if !resp.status().is_success() {
+            anyhow::bail!("Failed to activate device: {}", resp.status());
+        }
+        
+        Ok(())
     }
 }
 
@@ -285,6 +381,7 @@ struct DeviceRecord {
 
 #[derive(Deserialize)]
 struct DeviceStatusRecord {
+    #[allow(dead_code)]
     id: String,
     status: String,
     activated_at: Option<String>,
@@ -309,6 +406,21 @@ struct FamilyRecord {
     id: String,
     name: String,
     invite_code: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct FamilyMemberRecord {
+    #[allow(dead_code)]
+    family_id: String,
+    families: Option<FamilyRecord>,
+}
+
+#[derive(Deserialize)]
+struct ChildRecord {
+    id: String,
+    name: String,
+    date_of_birth: Option<String>,
+    avatar_url: Option<String>,
 }
 
 // ============ Public Types ============
@@ -339,4 +451,12 @@ pub struct FamilyInfo {
     pub id: String,
     pub name: String,
     pub invite_code: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChildInfo {
+    pub id: String,
+    pub name: String,
+    pub date_of_birth: Option<String>,
+    pub avatar_url: Option<String>,
 }
