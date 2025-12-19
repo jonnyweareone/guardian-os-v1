@@ -102,7 +102,7 @@ impl WizardState {
         
         let config_path = config_dir.join("daemon.toml");
         let content = toml::to_string_pretty(&config)?;
-        std::fs::write(&config_path, content)?;
+        std::fs::write(&config_path, &content)?;
         
         // Also write to user config dir
         if let Some(config_home) = dirs::config_dir() {

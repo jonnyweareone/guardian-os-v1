@@ -3,7 +3,10 @@
 use anyhow::{Result, Context};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tracing::{info, debug};
+use tracing::info;
+
+#[allow(unused_imports)]
+use tracing::debug;
 
 const SUPABASE_URL: &str = "https://gkyspvcafyttfhyjryyk.supabase.co";
 const SUPABASE_ANON_KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdreXNwdmNhZnl0dGZoeWpyeXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxMDIzMzQsImV4cCI6MjA4MTY3ODMzNH0.Ns5N9Y9uZgWqdhnYiX5IrubOO-Xopl2urBDR1AVD7FI";
@@ -310,24 +313,28 @@ struct FamilyRecord {
 
 // ============ Public Types ============
 
+#[derive(Debug, Clone)]
 pub struct DeviceInfo {
     pub device_id: String,
     pub hardware_id: String,
     pub activation_code: Option<String>,
 }
 
+#[derive(Debug, Clone)]
 pub struct ActivationStatus {
     pub activated: bool,
     pub family_id: Option<String>,
     pub child_id: Option<String>,
 }
 
+#[derive(Debug, Clone)]
 pub struct AuthResult {
     pub access_token: String,
     pub refresh_token: String,
     pub user_id: String,
 }
 
+#[derive(Debug, Clone)]
 pub struct FamilyInfo {
     pub id: String,
     pub name: String,

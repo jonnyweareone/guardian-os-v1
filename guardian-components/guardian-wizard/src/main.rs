@@ -13,7 +13,7 @@ mod state;
 
 use iced::{
     Application, Command, Element, Settings, Theme,
-    widget::{button, column, container, image, row, text, text_input, Space},
+    widget::{button, column, container, row, text, text_input, Space},
     Length, Alignment,
 };
 use tracing::{info, error};
@@ -382,7 +382,7 @@ impl GuardianWizard {
             Space::with_height(10),
             text_input("Password", &self.state.password)
                 .on_input(Message::PasswordChanged)
-                .password()
+                .secure(true)
                 .padding(10)
                 .width(300),
             Space::with_height(20),
