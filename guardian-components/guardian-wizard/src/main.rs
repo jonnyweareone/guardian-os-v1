@@ -426,30 +426,84 @@ impl Application for GuardianWizard {
 impl GuardianWizard {
     fn view_welcome(&self) -> Element<Message> {
         column![
-            // Logo would go here
+            // Guardian OS Logo
+            text("🛡️").size(80),
+            Space::with_height(10),
             text("Welcome to Guardian OS")
-                .size(40),
-            Space::with_height(20),
-            text("AI-powered safety for your family")
+                .size(42),
+            Space::with_height(10),
+            text("The safe computing platform for families")
+                .size(22),
+            Space::with_height(40),
+            
+            // Description
+            container(
+                column![
+                    text("Guardian OS is a complete Linux operating system designed to keep children safe online. Built on Pop!_OS with COSMIC desktop, it provides a beautiful, modern computing experience with powerful parental controls built in from the ground up.")
+                        .size(15),
+                ]
+                .padding(20)
+                .align_items(Alignment::Center)
+            )
+            .width(600),
+            
+            Space::with_height(30),
+            
+            // Features grid
+            text("Key Features")
                 .size(20),
+            Space::with_height(15),
+            
+            row![
+                column![
+                    text("🕐 Screen Time").size(16),
+                    text("Smart scheduling and").size(13),
+                    text("daily limits").size(13),
+                ]
+                .align_items(Alignment::Center)
+                .width(150),
+                
+                Space::with_width(20),
+                
+                column![
+                    text("🔒 Content Filter").size(16),
+                    text("AI-powered safe").size(13),
+                    text("browsing protection").size(13),
+                ]
+                .align_items(Alignment::Center)
+                .width(150),
+                
+                Space::with_width(20),
+                
+                column![
+                    text("📱 Parent App").size(16),
+                    text("Monitor and manage").size(13),
+                    text("from anywhere").size(13),
+                ]
+                .align_items(Alignment::Center)
+                .width(150),
+                
+                Space::with_width(20),
+                
+                column![
+                    text("🔐 Privacy First").size(16),
+                    text("Local processing,").size(13),
+                    text("no cloud tracking").size(13),
+                ]
+                .align_items(Alignment::Center)
+                .width(150),
+            ],
+            
             Space::with_height(40),
-            text("Guardian OS keeps your children safe online while respecting their privacy.")
-                .size(16),
-            Space::with_height(20),
-            text("• Smart screen time management")
-                .size(14),
-            text("• AI-powered content filtering")
-                .size(14),
-            text("• Real-time safety alerts")
-                .size(14),
-            text("• Works offline")
-                .size(14),
-            Space::with_height(40),
-            button(text("Get Started"))
-                .on_press(Message::NextPage)
-                .padding(15),
+            
+            button(
+                text("Get Started")
+                    .size(18)
+            )
+            .on_press(Message::NextPage)
+            .padding([15, 40]),
         ]
-        .spacing(10)
+        .spacing(5)
         .align_items(Alignment::Center)
         .into()
     }
@@ -690,9 +744,6 @@ impl GuardianWizard {
             .padding(40)
             .style(iced::theme::Container::Box),
             Space::with_height(30),
-            text("Or scan this QR code with the Guardian app:")
-                .size(14),
-            // TODO: QR code image
             Space::with_height(30),
             text("⏳ Waiting for parent approval...")
                 .size(16),
@@ -708,28 +759,56 @@ impl GuardianWizard {
             .unwrap_or_else(|| "your child".to_string());
         
         column![
-            text("🎉 All Set!")
-                .size(40),
-            Space::with_height(30),
-            text("Guardian OS is now protecting this device.")
-                .size(20),
-            Space::with_height(20),
-            text(format!("This device is set up for: {}", child_name))
-                .size(18),
-            Space::with_height(40),
-            text("What's next:")
-                .size(18),
+            text("🎉").size(60),
             Space::with_height(10),
-            text("• Screen time limits will be enforced")
-                .size(14),
-            text("• Content filtering is active")
-                .size(14),
-            text("• Activity reports are being sent to parents")
-                .size(14),
+            text("Welcome to Guardian OS!")
+                .size(36),
+            Space::with_height(20),
+            text(format!("This device is now set up for {}", child_name))
+                .size(20),
+            Space::with_height(30),
+            
+            container(
+                column![
+                    text("What happens now:")
+                        .size(18),
+                    Space::with_height(15),
+                    row![
+                        text("✓").size(16),
+                        Space::with_width(10),
+                        text("Screen time limits are active and will be enforced").size(14),
+                    ],
+                    Space::with_height(8),
+                    row![
+                        text("✓").size(16),
+                        Space::with_width(10),
+                        text("Content filtering is protecting web browsing").size(14),
+                    ],
+                    Space::with_height(8),
+                    row![
+                        text("✓").size(16),
+                        Space::with_width(10),
+                        text("App usage is being monitored").size(14),
+                    ],
+                    Space::with_height(8),
+                    row![
+                        text("✓").size(16),
+                        Space::with_width(10),
+                        text("Parents can manage settings from the Guardian app").size(14),
+                    ],
+                ]
+                .align_items(Alignment::Start)
+                .padding(25)
+            )
+            .style(iced::theme::Container::Box),
+            
             Space::with_height(40),
-            button(text("Finish Setup"))
-                .on_press(Message::Complete)
-                .padding(15),
+            button(
+                text("Start Using Guardian OS")
+                    .size(18)
+            )
+            .on_press(Message::Complete)
+            .padding([15, 40]),
         ]
         .spacing(5)
         .align_items(Alignment::Center)

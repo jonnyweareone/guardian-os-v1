@@ -1,13 +1,13 @@
 # Guardian OS Build System with Supabase Integration
 SHELL := /bin/bash
-.PHONY: all clean assets debs repo iso sync help
+.PHONY: all clean assets debs repo iso sync help bump-version bump-minor bump-major version-sync
 
 # Configuration
 GPG_KEYID ?= guardian@gameguardian.ai
 AWS_PROFILE ?= default
 CF_DISTRIBUTION_ID ?= 
 REPO_S3_BUCKET ?= apt.gameguardian.ai
-ISO_VERSION ?= 1.0.0
+ISO_VERSION := $(shell cat VERSION 2>/dev/null || echo "1.0.0")
 ISO_NAME = guardian-os-$(ISO_VERSION)-amd64.iso
 
 # Supabase Configuration (for build-time reference)
@@ -30,9 +30,13 @@ help:
 	@echo "  make sync    - Sync repo to S3"
 	@echo "  make clean   - Clean build artifacts"
 
-all: iso
+all: version-sync iso
 
-assets:
+version-sync:
+	@echo -e "$(GREEN)Syncing version $(ISO_VERSION) to all files...$(NC)"
+	@scripts/update-version.sh
+
+assets: version-sync
 	@echo -e "$(GREEN)Fetching brand assets...$(NC)"
 	@scripts/fetch-assets.sh
 
@@ -63,3 +67,31 @@ clean:
 	@find . -name "*.deb" -delete
 	@find . -name "*.buildinfo" -delete
 	@find . -name "*.changes" -delete
+
+# Version bumping - increments patch version
+bump-version:
+	@CURRENT=$$(cat VERSION); \
+	MAJOR=$$(echo $$CURRENT | cut -d. -f1); \
+	MINOR=$$(echo $$CURRENT | cut -d. -f2); \
+	PATCH=$$(echo $$CURRENT | cut -d. -f3); \
+	NEW_PATCH=$$((PATCH + 1)); \
+	NEW_VERSION="$$MAJOR.$$MINOR.$$NEW_PATCH"; \
+	echo "$$NEW_VERSION" > VERSION; \
+	echo -e "$(GREEN)Version bumped: $$CURRENT -> $$NEW_VERSION$(NC)"
+
+bump-minor:
+	@CURRENT=$$(cat VERSION); \
+	MAJOR=$$(echo $$CURRENT | cut -d. -f1); \
+	MINOR=$$(echo $$CURRENT | cut -d. -f2); \
+	NEW_MINOR=$$((MINOR + 1)); \
+	NEW_VERSION="$$MAJOR.$$NEW_MINOR.0"; \
+	echo "$$NEW_VERSION" > VERSION; \
+	echo -e "$(GREEN)Version bumped: $$CURRENT -> $$NEW_VERSION$(NC)"
+
+bump-major:
+	@CURRENT=$$(cat VERSION); \
+	MAJOR=$$(echo $$CURRENT | cut -d. -f1); \
+	NEW_MAJOR=$$((MAJOR + 1)); \
+	NEW_VERSION="$$NEW_MAJOR.0.0"; \
+	echo "$$NEW_VERSION" > VERSION; \
+	echo -e "$(GREEN)Version bumped: $$CURRENT -> $$NEW_VERSION$(NC)"
