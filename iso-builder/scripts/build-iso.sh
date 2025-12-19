@@ -273,6 +273,78 @@ EOF
     success "First-boot wizard configured"
 }
 
+configure_live_session() {
+    log "Configuring live session for COSMIC..."
+    
+    local root="$SQUASHFS_DIR"
+    
+    # COSMIC uses greetd, not GDM
+    # For live session, we configure auto-login to bypass cosmic-greeter issues in VMs
+    mkdir -p "${root}/etc/greetd"
+    
+    # Create live session auto-login config
+    cat > "${root}/etc/greetd/config.toml" << 'EOF'
+[terminal]
+vt = 1
+
+[default_session]
+command = "cosmic-session"
+user = "liveuser"
+EOF
+    
+    # Create cosmic-greeter config for live session
+    cat > "${root}/etc/greetd/cosmic-greeter.toml" << 'EOF'
+# Live session - auto login to bypass greeter rendering issues in VMs
+[initial_session]
+command = "cosmic-session"
+user = "liveuser"
+EOF
+    success "Greetd live session configured"
+    
+    # Create liveuser in chroot
+    log "Creating live session user..."
+    chroot "$root" /bin/bash << 'LIVEUSER_SCRIPT'
+#!/bin/bash
+# Create liveuser for live session
+if ! id liveuser &>/dev/null; then
+    useradd -m -s /bin/bash -G sudo,adm,cdrom,dip,plugdev,lpadmin liveuser
+    echo "liveuser:live" | chpasswd
+    # Allow passwordless sudo for live session
+    echo "liveuser ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/liveuser
+    chmod 440 /etc/sudoers.d/liveuser
+fi
+LIVEUSER_SCRIPT
+    success "Live session user created"
+    
+    # Add kernel parameters for better VM compatibility
+    log "Adding VM-friendly kernel parameters..."
+    
+    # Update GRUB for live session
+    if [ -f "${root}/etc/default/grub" ]; then
+        sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="[^"]*"/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash nomodeset"/' "${root}/etc/default/grub"
+    fi
+    
+    # Also update isolinux/grub boot entries in the ISO
+    if [ -f "${NEW_ISO_DIR}/boot/grub/grub.cfg" ]; then
+        sed -i 's/quiet splash/quiet splash nomodeset/g' "${NEW_ISO_DIR}/boot/grub/grub.cfg"
+        success "GRUB boot parameters updated"
+    fi
+    
+    if [ -f "${NEW_ISO_DIR}/isolinux/isolinux.cfg" ]; then
+        sed -i 's/quiet splash/quiet splash nomodeset/g' "${NEW_ISO_DIR}/isolinux/isolinux.cfg"
+        success "ISOLINUX boot parameters updated"
+    fi
+    
+    # Update casper boot parameters in all config files
+    for cfg in "${NEW_ISO_DIR}"/boot/grub/*.cfg "${NEW_ISO_DIR}"/EFI/boot/*.cfg "${NEW_ISO_DIR}"/EFI/BOOT/*.cfg; do
+        if [ -f "$cfg" ]; then
+            sed -i 's/quiet splash/quiet splash nomodeset/g' "$cfg" 2>/dev/null || true
+        fi
+    done
+    
+    success "Live session configuration complete"
+}
+
 repack_squashfs() {
     log "Repacking filesystem (this takes a while)..."
     
@@ -359,6 +431,7 @@ main() {
     extract_iso
     inject_guardian
     apply_branding
+    configure_live_session
     repack_squashfs
     create_iso
 }
