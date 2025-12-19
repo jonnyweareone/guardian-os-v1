@@ -10,6 +10,7 @@ pub enum WizardPage {
     Welcome,
     UserType,
     ParentLogin,
+    SelectChild,  // NEW: Child selection after parent login
     ChildJoin,
     WaitingActivation,
     Complete,
@@ -30,15 +31,47 @@ pub struct WizardState {
     pub password: String,
     pub name: String,
     pub access_token: Option<String>,
+    pub user_id: Option<String>,
     
     // Family
     pub family_id: Option<String>,
+    pub family_name: Option<String>,
     pub family_code: String,
     pub child_id: Option<String>,
+    pub children: Vec<ChildData>,
+    pub selected_child: Option<ChildData>,
     
     // UI state
     pub error: Option<String>,
     pub loading: bool,
+}
+
+/// Child data for display
+#[derive(Debug, Clone)]
+pub struct ChildData {
+    pub id: String,
+    pub name: String,
+    pub date_of_birth: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+impl ChildData {
+    /// Calculate age from date of birth
+    pub fn age(&self) -> Option<u32> {
+        let dob = self.date_of_birth.as_ref()?;
+        let birth = chrono::NaiveDate::parse_from_str(dob, "%Y-%m-%d").ok()?;
+        let today = chrono::Local::now().date_naive();
+        let age = today.years_since(birth)?;
+        Some(age)
+    }
+    
+    /// Get display string with name and age
+    pub fn display_name(&self) -> String {
+        match self.age() {
+            Some(age) => format!("{} ({})", self.name, age),
+            None => self.name.clone(),
+        }
+    }
 }
 
 impl WizardState {
@@ -53,9 +86,13 @@ impl WizardState {
             password: String::new(),
             name: String::new(),
             access_token: None,
+            user_id: None,
             family_id: None,
+            family_name: None,
             family_code: String::new(),
             child_id: None,
+            children: Vec::new(),
+            selected_child: None,
             error: None,
             loading: false,
         }
@@ -66,7 +103,8 @@ impl WizardState {
         self.current_page = match self.current_page {
             WizardPage::Welcome => WizardPage::UserType,
             WizardPage::UserType => WizardPage::ParentLogin, // Default
-            WizardPage::ParentLogin => WizardPage::WaitingActivation,
+            WizardPage::ParentLogin => WizardPage::SelectChild, // Changed: go to child selection
+            WizardPage::SelectChild => WizardPage::Complete,    // After selecting child
             WizardPage::ChildJoin => WizardPage::WaitingActivation,
             WizardPage::WaitingActivation => WizardPage::Complete,
             WizardPage::Complete => WizardPage::Complete,
@@ -79,6 +117,7 @@ impl WizardState {
             WizardPage::Welcome => WizardPage::Welcome,
             WizardPage::UserType => WizardPage::Welcome,
             WizardPage::ParentLogin => WizardPage::UserType,
+            WizardPage::SelectChild => WizardPage::ParentLogin,
             WizardPage::ChildJoin => WizardPage::UserType,
             WizardPage::WaitingActivation => WizardPage::UserType,
             WizardPage::Complete => WizardPage::Complete,
@@ -92,6 +131,7 @@ impl WizardState {
             hardware_id: self.hardware_id.clone(),
             family_id: self.family_id.clone(),
             child_id: self.child_id.clone(),
+            child_name: self.selected_child.as_ref().map(|c| c.name.clone()),
             activation_code: self.activation_code.clone(),
             activated: self.activated,
             access_token: self.access_token.clone(),
@@ -123,6 +163,7 @@ struct DaemonConfig {
     hardware_id: Option<String>,
     family_id: Option<String>,
     child_id: Option<String>,
+    child_name: Option<String>,
     activation_code: Option<String>,
     activated: bool,
     access_token: Option<String>,

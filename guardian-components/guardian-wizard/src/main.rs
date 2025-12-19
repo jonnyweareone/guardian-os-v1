@@ -2,10 +2,10 @@
 //!
 //! This wizard runs on first boot to:
 //! 1. Register the device with Guardian backend
-//! 2. Display activation code for parent to approve
-//! 3. Wait for parent approval
-//! 4. Configure device for assigned child
-//! 5. Start Guardian Daemon
+//! 2. Authenticate parent user
+//! 3. Fetch family and children data
+//! 4. Allow parent to select which child will use this device
+//! 5. Activate device and start Guardian Daemon
 
 mod api;
 mod pages;
@@ -13,13 +13,13 @@ mod state;
 
 use iced::{
     Application, Command, Element, Settings, Theme,
-    widget::{button, column, container, row, text, text_input, Space},
+    widget::{button, column, container, row, text, text_input, scrollable, Space},
     Length, Alignment,
 };
 use tracing::{info, error};
 
 use api::GuardianApi;
-use state::{WizardState, WizardPage};
+use state::{WizardState, WizardPage, ChildData};
 
 fn main() -> iced::Result {
     // Initialize logging
@@ -67,10 +67,17 @@ enum Message {
     NameChanged(String),
     Login,
     LoginResult(Result<api::AuthResult, String>),
-    CreateFamily,
-    FamilyCreated(Result<api::FamilyInfo, String>),
     
-    // Child flow
+    // Family & Children
+    FetchFamily,
+    FamilyLoaded(Result<api::FamilyInfo, String>),
+    FetchChildren,
+    ChildrenLoaded(Result<Vec<api::ChildInfo>, String>),
+    SelectChild(ChildData),
+    ConfirmChildSelection,
+    DeviceActivated(Result<(), String>),
+    
+    // Child join flow
     FamilyCodeChanged(String),
     JoinFamily,
     JoinResult(Result<api::FamilyInfo, String>),
@@ -196,6 +203,8 @@ impl Application for GuardianWizard {
             }
             
             Message::Login => {
+                self.state.loading = true;
+                self.state.error = None;
                 let api = self.api.clone();
                 let email = self.state.email.clone();
                 let password = self.state.password.clone();
@@ -206,13 +215,135 @@ impl Application for GuardianWizard {
             }
             
             Message::LoginResult(result) => {
+                self.state.loading = false;
                 match result {
                     Ok(auth) => {
-                        self.state.access_token = Some(auth.access_token);
-                        self.state.next_page();
+                        info!("Login successful for user: {}", auth.user_id);
+                        self.state.access_token = Some(auth.access_token.clone());
+                        self.state.user_id = Some(auth.user_id.clone());
+                        self.api.set_access_token(auth.access_token);
+                        // Immediately fetch family data
+                        return Command::perform(async {}, |_| Message::FetchFamily);
                     }
                     Err(e) => {
                         self.state.error = Some(format!("Login failed: {}", e));
+                    }
+                }
+                Command::none()
+            }
+            
+            Message::FetchFamily => {
+                self.state.loading = true;
+                if let Some(ref user_id) = self.state.user_id {
+                    let api = self.api.clone();
+                    let user_id = user_id.clone();
+                    Command::perform(
+                        async move { api.fetch_family_for_user(&user_id).await },
+                        |result| Message::FamilyLoaded(result.map_err(|e| e.to_string())),
+                    )
+                } else {
+                    self.state.error = Some("No user ID available".to_string());
+                    Command::none()
+                }
+            }
+            
+            Message::FamilyLoaded(result) => {
+                match result {
+                    Ok(family) => {
+                        info!("Family loaded: {} ({})", family.name, family.id);
+                        self.state.family_id = Some(family.id.clone());
+                        self.state.family_name = Some(family.name);
+                        // Now fetch children
+                        let api = self.api.clone();
+                        let family_id = family.id;
+                        return Command::perform(
+                            async move { api.fetch_children(&family_id).await },
+                            |result| Message::ChildrenLoaded(result.map_err(|e| e.to_string())),
+                        );
+                    }
+                    Err(e) => {
+                        self.state.loading = false;
+                        self.state.error = Some(format!("Failed to load family: {}", e));
+                    }
+                }
+                Command::none()
+            }
+            
+            Message::FetchChildren => {
+                if let Some(ref family_id) = self.state.family_id {
+                    let api = self.api.clone();
+                    let family_id = family_id.clone();
+                    Command::perform(
+                        async move { api.fetch_children(&family_id).await },
+                        |result| Message::ChildrenLoaded(result.map_err(|e| e.to_string())),
+                    )
+                } else {
+                    Command::none()
+                }
+            }
+            
+            Message::ChildrenLoaded(result) => {
+                self.state.loading = false;
+                match result {
+                    Ok(children) => {
+                        info!("Loaded {} children", children.len());
+                        self.state.children = children.into_iter().map(|c| ChildData {
+                            id: c.id,
+                            name: c.name,
+                            date_of_birth: c.date_of_birth,
+                            avatar_url: c.avatar_url,
+                        }).collect();
+                        // Navigate to child selection page
+                        self.state.current_page = WizardPage::SelectChild;
+                    }
+                    Err(e) => {
+                        self.state.error = Some(format!("Failed to load children: {}", e));
+                    }
+                }
+                Command::none()
+            }
+            
+            Message::SelectChild(child) => {
+                info!("Selected child: {} ({})", child.name, child.id);
+                self.state.selected_child = Some(child.clone());
+                self.state.child_id = Some(child.id);
+                Command::none()
+            }
+            
+            Message::ConfirmChildSelection => {
+                // Activate device for selected child
+                if let (Some(device_id), Some(child_id), Some(family_id)) = (
+                    &self.state.device_id,
+                    &self.state.child_id,
+                    &self.state.family_id,
+                ) {
+                    self.state.loading = true;
+                    let api = self.api.clone();
+                    let device_id = device_id.clone();
+                    let child_id = child_id.clone();
+                    let family_id = family_id.clone();
+                    Command::perform(
+                        async move { 
+                            api.activate_device_for_child(&device_id, &child_id, &family_id).await 
+                        },
+                        |result| Message::DeviceActivated(result.map_err(|e| e.to_string())),
+                    )
+                } else {
+                    self.state.error = Some("Missing device, child, or family ID".to_string());
+                    Command::none()
+                }
+            }
+            
+            Message::DeviceActivated(result) => {
+                self.state.loading = false;
+                match result {
+                    Ok(()) => {
+                        info!("Device activated successfully!");
+                        self.state.activated = true;
+                        self.state.current_page = WizardPage::Complete;
+                    }
+                    Err(e) => {
+                        self.state.error = Some(format!("Activation failed: {}", e));
                     }
                 }
                 Command::none()
@@ -229,13 +360,6 @@ impl Application for GuardianWizard {
             }
             
             Message::JoinResult(_) => Command::none(),
-            
-            Message::CreateFamily => {
-                // TODO: Implement create family flow
-                Command::none()
-            }
-            
-            Message::FamilyCreated(_) => Command::none(),
             
             Message::Complete => {
                 self.state.save_config().ok();
@@ -283,6 +407,7 @@ impl Application for GuardianWizard {
             WizardPage::Welcome => self.view_welcome(),
             WizardPage::UserType => self.view_user_type(),
             WizardPage::ParentLogin => self.view_parent_login(),
+            WizardPage::SelectChild => self.view_select_child(),
             WizardPage::ChildJoin => self.view_child_join(),
             WizardPage::WaitingActivation => self.view_waiting_activation(),
             WizardPage::Complete => self.view_complete(),
@@ -340,7 +465,7 @@ impl GuardianWizard {
                         text("👨‍👩‍👧 I'm a Parent")
                             .size(20),
                         Space::with_height(10),
-                        text("Set up a new family or\nadd this device to your family")
+                        text("Set up this device for\none of your children")
                             .size(14),
                     ]
                     .align_items(Alignment::Center)
@@ -368,6 +493,12 @@ impl GuardianWizard {
     }
     
     fn view_parent_login(&self) -> Element<Message> {
+        let login_button = if self.state.loading {
+            button(text("Signing in..."))
+        } else {
+            button(text("Sign In")).on_press(Message::Login)
+        };
+        
         column![
             text("Parent Sign In")
                 .size(30),
@@ -396,14 +527,110 @@ impl GuardianWizard {
                 button(text("Back"))
                     .on_press(Message::PrevPage),
                 Space::with_width(20),
-                button(text("Sign In"))
-                    .on_press(Message::Login),
+                login_button,
             ],
+        ]
+        .spacing(5)
+        .align_items(Alignment::Center)
+        .into()
+    }
+    
+    fn view_select_child(&self) -> Element<Message> {
+        let family_name = self.state.family_name.clone()
+            .unwrap_or_else(|| "Your Family".to_string());
+        
+        // Build list of child buttons
+        let children_list: Element<Message> = if self.state.children.is_empty() {
+            column![
+                text("No children found in your family.")
+                    .size(16),
+                Space::with_height(10),
+                text("Please add children in the Guardian app first.")
+                    .size(14),
+            ]
+            .align_items(Alignment::Center)
+            .into()
+        } else {
+            let mut children_col = column![].spacing(10).align_items(Alignment::Center);
+            
+            for child in &self.state.children {
+                let is_selected = self.state.selected_child.as_ref()
+                    .map(|s| s.id == child.id)
+                    .unwrap_or(false);
+                
+                let child_clone = child.clone();
+                let age_str = child.age()
+                    .map(|a| format!("{} years old", a))
+                    .unwrap_or_default();
+                
+                let btn_content = row![
+                    // Avatar placeholder
+                    text("👤").size(32),
+                    Space::with_width(15),
+                    column![
+                        text(&child.name).size(18),
+                        text(&age_str).size(14),
+                    ],
+                ]
+                .align_items(Alignment::Center)
+                .padding(15);
+                
+                let btn = if is_selected {
+                    button(btn_content)
+                        .style(iced::theme::Button::Primary)
+                        .on_press(Message::SelectChild(child_clone))
+                        .width(300)
+                } else {
+                    button(btn_content)
+                        .on_press(Message::SelectChild(child_clone))
+                        .width(300)
+                };
+                
+                children_col = children_col.push(btn);
+            }
+            
+            scrollable(children_col)
+                .height(250)
+                .into()
+        };
+        
+        // Confirm button (only enabled if child selected)
+        let confirm_btn = if self.state.selected_child.is_some() && !self.state.loading {
+            button(text("Continue"))
+                .on_press(Message::ConfirmChildSelection)
+                .padding(15)
+        } else if self.state.loading {
+            button(text("Activating...")).padding(15)
+        } else {
+            button(text("Select a child")).padding(15)
+        };
+        
+        column![
+            text("Who will use this device?")
+                .size(30),
+            Space::with_height(10),
+            text(format!("Family: {}", family_name))
+                .size(16),
+            Space::with_height(30),
+            text("Select the child who will use this computer:")
+                .size(16),
             Space::with_height(20),
-            text("Don't have an account?")
-                .size(14),
-            button(text("Create Account"))
-                .on_press(Message::GoToPage(WizardPage::ParentLogin)), // TODO: SignUp page
+            children_list,
+            Space::with_height(20),
+            if let Some(ref error) = self.state.error {
+                text(error).style(iced::theme::Text::Color(iced::Color::from_rgb(0.8, 0.2, 0.2)))
+            } else if let Some(ref child) = self.state.selected_child {
+                text(format!("Selected: {}", child.display_name()))
+            } else {
+                text("")
+            },
+            Space::with_height(20),
+            row![
+                button(text("Back"))
+                    .on_press(Message::GoToPage(WizardPage::ParentLogin)),
+                Space::with_width(20),
+                confirm_btn,
+            ],
         ]
         .spacing(5)
         .align_items(Alignment::Center)
@@ -476,6 +703,10 @@ impl GuardianWizard {
     }
     
     fn view_complete(&self) -> Element<Message> {
+        let child_name = self.state.selected_child.as_ref()
+            .map(|c| c.name.clone())
+            .unwrap_or_else(|| "your child".to_string());
+        
         column![
             text("🎉 All Set!")
                 .size(40),
@@ -483,13 +714,8 @@ impl GuardianWizard {
             text("Guardian OS is now protecting this device.")
                 .size(20),
             Space::with_height(20),
-            if let Some(ref child_id) = self.state.child_id {
-                text(format!("This device is assigned to: {}", child_id))
-                    .size(16)
-            } else {
-                text("Device activated successfully")
-                    .size(16)
-            },
+            text(format!("This device is set up for: {}", child_name))
+                .size(18),
             Space::with_height(40),
             text("What's next:")
                 .size(18),
