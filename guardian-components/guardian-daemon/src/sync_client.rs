@@ -1,173 +1,359 @@
-//! gRPC client for Guardian Sync Server
+//! Sync client for Guardian OS v1.1.0
+//! 
+//! Handles data synchronization with Supabase backend via Edge Functions
 
 use std::sync::Arc;
 use std::time::Duration;
-use tonic::transport::Channel;
-use tracing::{info, error, debug};
+use tokio::sync::RwLock;
+use tracing::{info, error, debug, warn};
 use anyhow::Result;
+use chrono::{Utc, Local, NaiveDate};
 
 use crate::AppState;
-use crate::activity::ActivityEvent;
-use crate::rules::SafetyRules;
+use crate::supabase::{
+    SupabaseClient, SyncPayload, TopicSummarySync, TopicEntry,
+    BrowsingSummarySync, DomainEntry, CategoryEntry, 
+    AlertSync, ContactSync, ChildInteraction,
+    DeviceRegistration, HardwareInfo, DeviceStatusResponse,
+};
+use crate::config::Config;
 
-/// Client for communicating with Guardian Sync Server
-pub struct GuardianSyncClient {
-    // In production, this would be generated from .proto files
-    // channel: Channel,
-    server_url: String,
-    connected: bool,
+const GUARDIAN_VERSION: &str = "1.1.0";
+
+/// Device activation state
+#[derive(Debug, Clone)]
+pub enum ActivationState {
+    NotRegistered,
+    WaitingForActivation { device_code: String },
+    Activated { family_id: String, child_id: Option<String> },
 }
 
-impl GuardianSyncClient {
-    /// Connect to the Guardian Sync Server
-    pub async fn connect(server_url: &str) -> Result<Self> {
-        info!("Connecting to Guardian Sync Server at {}", server_url);
-        
-        // TODO: Actually connect via gRPC
-        // let channel = Channel::from_shared(server_url.to_string())?
-        //     .timeout(Duration::from_secs(10))
-        //     .connect()
-        //     .await?;
-        
-        Ok(Self {
-            server_url: server_url.to_string(),
-            connected: true,
-        })
+/// Sync client managing cloud communication
+pub struct SyncClient {
+    supabase: SupabaseClient,
+    activation_state: Arc<RwLock<ActivationState>>,
+    cached_config: Arc<RwLock<Option<DeviceStatusResponse>>>,
+}
+
+impl SyncClient {
+    pub fn new() -> Self {
+        Self {
+            supabase: SupabaseClient::new(),
+            activation_state: Arc::new(RwLock::new(ActivationState::NotRegistered)),
+            cached_config: Arc::new(RwLock::new(None)),
+        }
     }
-    
-    /// Check if connected to server
-    pub fn is_connected(&self) -> bool {
-        self.connected
+
+    /// Register device and get activation code
+    pub async fn register_device(&self) -> Result<String> {
+        let hardware_info = HardwareInfo {
+            cpu: get_cpu_info(),
+            ram_gb: get_ram_gb(),
+            gpu: get_gpu_info(),
+            hostname: get_hostname(),
+        };
+
+        let registration = DeviceRegistration {
+            os_version: GUARDIAN_VERSION.to_string(),
+            device_type: Some(detect_device_type()),
+            hardware_info: Some(hardware_info),
+        };
+
+        let response = self.supabase.register_device(&registration).await?;
+        
+        // Update state
+        {
+            let mut state = self.activation_state.write().await;
+            *state = ActivationState::WaitingForActivation {
+                device_code: response.device_code.clone(),
+            };
+        }
+
+        info!("Device registered: {}", response.device_code);
+        info!("Activation URL: {}", response.activation_url);
+        
+        Ok(response.device_code)
     }
-    
-    /// Upload activity events to server
-    pub async fn upload_activity(&self, events: &[ActivityEvent]) -> Result<Vec<String>> {
-        if events.is_empty() {
-            return Ok(vec![]);
+
+    /// Poll for activation status
+    pub async fn check_activation(&self, device_code: &str) -> Result<bool> {
+        let status = self.supabase.check_activation(device_code).await?;
+        
+        if status.activated {
+            let family_id = status.family.as_ref().map(|f| f.id.clone()).unwrap_or_default();
+            let child_id = status.assigned_child.as_ref().map(|c| c.id.clone());
+            
+            // Update state
+            {
+                let mut state = self.activation_state.write().await;
+                *state = ActivationState::Activated { 
+                    family_id: family_id.clone(), 
+                    child_id: child_id.clone(),
+                };
+            }
+
+            // Cache config
+            {
+                let mut config = self.cached_config.write().await;
+                *config = Some(status.clone());
+            }
+
+            // Set device code on supabase client for sync
+            let mut supabase = self.supabase.clone();
+            // Note: In real implementation, supabase would be Arc<RwLock<SupabaseClient>>
+            
+            info!("Device activated! Family: {}", family_id);
+            if let Some(ref child) = status.assigned_child {
+                info!("Assigned to child: {} ({})", child.name, child.age_tier);
+            }
+            
+            Ok(true)
+        } else {
+            debug!("Device not yet activated");
+            Ok(false)
+        }
+    }
+
+    /// Get cached configuration
+    pub async fn get_config(&self) -> Option<DeviceStatusResponse> {
+        self.cached_config.read().await.clone()
+    }
+
+    /// Sync topic summaries to cloud
+    pub async fn sync_topics(&self, summaries: Vec<TopicSummarySync>, device_code: &str) -> Result<u32> {
+        let payload = SyncPayload {
+            device_code: device_code.to_string(),
+            os_version: GUARDIAN_VERSION.to_string(),
+            topic_summaries: Some(summaries),
+            browsing_summary: None,
+            alerts: None,
+            contacts: None,
+        };
+
+        let mut client = SupabaseClient::with_device_code(device_code);
+        let response = client.sync_data(&payload).await?;
+        
+        Ok(response.results.topic_summaries)
+    }
+
+    /// Sync browsing summary to cloud
+    pub async fn sync_browsing(&self, summary: BrowsingSummarySync, device_code: &str) -> Result<bool> {
+        let payload = SyncPayload {
+            device_code: device_code.to_string(),
+            os_version: GUARDIAN_VERSION.to_string(),
+            topic_summaries: None,
+            browsing_summary: Some(summary),
+            alerts: None,
+            contacts: None,
+        };
+
+        let mut client = SupabaseClient::with_device_code(device_code);
+        let response = client.sync_data(&payload).await?;
+        
+        Ok(response.results.browsing_summary)
+    }
+
+    /// Send alert to cloud (triggers push notification)
+    pub async fn send_alert(&self, alert: AlertSync, device_code: &str) -> Result<()> {
+        let payload = SyncPayload {
+            device_code: device_code.to_string(),
+            os_version: GUARDIAN_VERSION.to_string(),
+            topic_summaries: None,
+            browsing_summary: None,
+            alerts: Some(vec![alert]),
+            contacts: None,
+        };
+
+        let mut client = SupabaseClient::with_device_code(device_code);
+        let response = client.sync_data(&payload).await?;
+        
+        if response.results.alerts > 0 {
+            info!("Alert sent successfully");
         }
         
-        debug!("Uploading {} activity events", events.len());
-        
-        // TODO: Implement actual gRPC call
-        // For now, simulate success
-        let synced_ids: Vec<String> = events.iter().map(|e| e.id.clone()).collect();
-        
-        info!("Successfully uploaded {} events", synced_ids.len());
-        Ok(synced_ids)
-    }
-    
-    /// Fetch latest safety rules from server
-    pub async fn fetch_rules(&self, child_id: &str) -> Result<SafetyRules> {
-        debug!("Fetching safety rules for child {}", child_id);
-        
-        // TODO: Implement actual gRPC call
-        // For now, return default rules
-        Ok(SafetyRules::default())
-    }
-    
-    /// Send heartbeat to server
-    pub async fn heartbeat(&self, device_id: &str) -> Result<()> {
-        debug!("Sending heartbeat for device {}", device_id);
-        
-        // TODO: Implement actual gRPC call
         Ok(())
     }
-    
-    /// Register this device with the server
-    pub async fn register_device(&self, device_info: &DeviceInfo) -> Result<String> {
-        info!("Registering device: {}", device_info.hostname);
+
+    /// Sync contact data to cloud
+    pub async fn sync_contacts(&self, contacts: Vec<ContactSync>, device_code: &str) -> Result<u32> {
+        let payload = SyncPayload {
+            device_code: device_code.to_string(),
+            os_version: GUARDIAN_VERSION.to_string(),
+            topic_summaries: None,
+            browsing_summary: None,
+            alerts: None,
+            contacts: Some(contacts),
+        };
+
+        let mut client = SupabaseClient::with_device_code(device_code);
+        let response = client.sync_data(&payload).await?;
         
-        // TODO: Implement actual gRPC call
-        // Return a mock device ID for now
-        Ok(uuid::Uuid::new_v4().to_string())
+        Ok(response.results.contacts)
     }
-    
-    /// Report an alert to the server
-    pub async fn report_alert(&self, alert: &Alert) -> Result<()> {
-        info!("Reporting alert: {} - {}", alert.alert_type, alert.title);
-        
-        // TODO: Implement actual gRPC call
-        Ok(())
+
+    /// Send heartbeat
+    pub async fn heartbeat(&self, device_code: &str) -> Result<()> {
+        let mut client = SupabaseClient::with_device_code(device_code);
+        client.heartbeat().await
     }
 }
 
-/// Device information for registration
-#[derive(Debug, Clone)]
-pub struct DeviceInfo {
-    pub hostname: String,
-    pub os_version: String,
-    pub guardian_version: String,
-    pub hardware_id: String,
+impl Clone for SyncClient {
+    fn clone(&self) -> Self {
+        Self {
+            supabase: SupabaseClient::new(),
+            activation_state: Arc::clone(&self.activation_state),
+            cached_config: Arc::clone(&self.cached_config),
+        }
+    }
 }
 
-/// Alert to send to parents
-#[derive(Debug, Clone)]
-pub struct Alert {
-    pub alert_type: String,
-    pub severity: String,
-    pub title: String,
-    pub description: String,
-    pub child_id: Option<String>,
-    pub metadata: serde_json::Value,
-}
+// ============ Sync Loop ============
 
-/// Run the sync loop - periodically syncs with server
+/// Run the main sync loop
 pub async fn run_sync_loop(state: Arc<AppState>) -> Result<()> {
-    let sync_interval = Duration::from_secs(state.config.sync_interval_secs);
+    let sync_interval = Duration::from_secs(state.config.sync_interval_secs.max(60));
+    let heartbeat_interval = Duration::from_secs(30);
     
-    info!("Starting sync loop, interval: {} seconds", state.config.sync_interval_secs);
-    
+    let mut heartbeat_ticker = tokio::time::interval(heartbeat_interval);
+    let mut sync_ticker = tokio::time::interval(sync_interval);
+
+    info!("Starting sync loop (sync: {}s, heartbeat: 30s)", state.config.sync_interval_secs);
+
     loop {
-        tokio::time::sleep(sync_interval).await;
-        
-        if let Some(ref client) = state.sync_client {
-            // Upload pending activity
-            match state.storage.get_unsynced_events(100).await {
-                Ok(events) if !events.is_empty() => {
-                    match client.upload_activity(&events).await {
-                        Ok(synced_ids) => {
-                            if let Err(e) = state.storage.mark_synced(&synced_ids).await {
-                                error!("Failed to mark events as synced: {}", e);
-                            }
+        tokio::select! {
+            _ = heartbeat_ticker.tick() => {
+                if let Some(ref device_code) = state.config.device_code {
+                    if let Some(ref client) = state.sync_client {
+                        if let Err(e) = client.heartbeat(device_code).await {
+                            debug!("Heartbeat failed: {}", e);
                         }
-                        Err(e) => {
-                            error!("Failed to upload activity: {}", e);
-                        }
-                    }
-                }
-                Ok(_) => {
-                    debug!("No pending events to sync");
-                }
-                Err(e) => {
-                    error!("Failed to get unsynced events: {}", e);
-                }
-            }
-            
-            // Fetch latest rules
-            if let Some(ref child_id) = state.config.child_id {
-                match client.fetch_rules(child_id).await {
-                    Ok(new_rules) => {
-                        let mut rules = state.rules.write().await;
-                        if new_rules.version > rules.version {
-                            *rules = new_rules.clone();
-                            if let Err(e) = state.storage.save_rules(&new_rules).await {
-                                error!("Failed to cache rules: {}", e);
-                            }
-                            info!("Updated safety rules to version {}", new_rules.version);
-                        }
-                    }
-                    Err(e) => {
-                        error!("Failed to fetch rules: {}", e);
                     }
                 }
             }
             
-            // Send heartbeat
-            if let Some(ref device_id) = state.config.device_id {
-                if let Err(e) = client.heartbeat(device_id).await {
-                    error!("Heartbeat failed: {}", e);
+            _ = sync_ticker.tick() => {
+                if let Some(ref device_code) = state.config.device_code {
+                    if let Some(ref client) = state.sync_client {
+                        // Sync DNS/browsing summaries
+                        if let Err(e) = sync_dns_data(&state, client, device_code).await {
+                            error!("DNS sync failed: {}", e);
+                        }
+                        
+                        // Sync any pending alerts
+                        if let Err(e) = sync_pending_alerts(&state, client, device_code).await {
+                            error!("Alert sync failed: {}", e);
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+/// Sync DNS query data to cloud
+async fn sync_dns_data(state: &AppState, client: &SyncClient, device_code: &str) -> Result<()> {
+    // Get today's DNS summary from local storage
+    let today = Local::now().format("%Y-%m-%d").to_string();
+    
+    // In production, this would query the local DNS database
+    // For now, create a placeholder summary
+    let summary = BrowsingSummarySync {
+        child_id: state.config.child_id.clone().unwrap_or_default(),
+        date: today,
+        top_domains: vec![],
+        categories: vec![],
+        blocked_count: 0,
+        vpn_attempts: 0,
+        total_queries: 0,
+    };
+    
+    client.sync_browsing(summary, device_code).await?;
+    debug!("DNS data synced");
+    
+    Ok(())
+}
+
+/// Sync pending alerts to cloud
+async fn sync_pending_alerts(state: &AppState, client: &SyncClient, device_code: &str) -> Result<()> {
+    // Get pending alerts from local storage
+    // In production, this would query pending_alerts table
+    
+    // Placeholder - no pending alerts
+    Ok(())
+}
+
+// ============ Helper Functions ============
+
+fn get_cpu_info() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(contents) = std::fs::read_to_string("/proc/cpuinfo") {
+            for line in contents.lines() {
+                if line.starts_with("model name") {
+                    if let Some(value) = line.split(':').nth(1) {
+                        return Some(value.trim().to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn get_ram_gb() -> Option<u32> {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(contents) = std::fs::read_to_string("/proc/meminfo") {
+            for line in contents.lines() {
+                if line.starts_with("MemTotal") {
+                    if let Some(value) = line.split_whitespace().nth(1) {
+                        if let Ok(kb) = value.parse::<u64>() {
+                            return Some((kb / 1024 / 1024) as u32);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn get_gpu_info() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        // Try lspci for GPU info
+        if let Ok(output) = std::process::Command::new("lspci")
+            .args(["-v", "-s", "$(lspci | grep VGA | cut -d' ' -f1)"])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if !stdout.is_empty() {
+                return Some(stdout.lines().next().unwrap_or("").to_string());
+            }
+        }
+    }
+    None
+}
+
+fn get_hostname() -> Option<String> {
+    hostname::get().ok().map(|h| h.to_string_lossy().to_string())
+}
+
+fn detect_device_type() -> String {
+    // Simple heuristic based on form factor
+    #[cfg(target_os = "linux")]
+    {
+        // Check for laptop indicators
+        if std::path::Path::new("/sys/class/power_supply/BAT0").exists() {
+            return "laptop".to_string();
+        }
+    }
+    "desktop".to_string()
+}
+
+impl Default for SyncClient {
+    fn default() -> Self {
+        Self::new()
     }
 }
