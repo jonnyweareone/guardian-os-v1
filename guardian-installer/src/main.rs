@@ -304,7 +304,8 @@ impl Application for App {
                     }
 
                     page::Message::GuardianChild(message) => {
-                        if let Some(page) = self.pages.get_mut(&TypeId::of::<page::guardian_child::Page>()) {
+                        // First, update the child page and extract context if needed
+                        let sync_context = if let Some(page) = self.pages.get_mut(&TypeId::of::<page::guardian_child::Page>()) {
                             let child_page = page
                                 .as_any()
                                 .downcast_mut::<page::guardian_child::Page>()
@@ -312,23 +313,39 @@ impl Application for App {
                             
                             let result = child_page.update(message);
                             
-                            // Pass context to sync page when device is claimed
-                            if child_page.device_claimed {
+                            // Extract context if device is claimed
+                            let context = if child_page.device_claimed {
                                 if let (Some(token), Some(parent_id), Some(device_id)) = (
-                                    &child_page.access_token,
-                                    &child_page.parent_id,
-                                    &child_page.device_id,
+                                    child_page.access_token.clone(),
+                                    child_page.parent_id.clone(),
+                                    child_page.device_id.clone(),
                                 ) {
-                                    if let Some(sync_page) = self.pages.get_mut(&TypeId::of::<page::guardian_sync::Page>()) {
-                                        sync_page
-                                            .as_any()
-                                            .downcast_mut::<page::guardian_sync::Page>()
-                                            .unwrap()
-                                            .set_context(token.clone(), parent_id.clone(), device_id.clone());
-                                    }
+                                    Some((token, parent_id, device_id))
+                                } else {
+                                    None
                                 }
-                            }
+                            } else {
+                                None
+                            };
                             
+                            Some((result, context))
+                        } else {
+                            None
+                        };
+                        
+                        // Now pass context to sync page if we have it
+                        if let Some((result, Some((token, parent_id, device_id)))) = sync_context {
+                            if let Some(sync_page) = self.pages.get_mut(&TypeId::of::<page::guardian_sync::Page>()) {
+                                sync_page
+                                    .as_any()
+                                    .downcast_mut::<page::guardian_sync::Page>()
+                                    .unwrap()
+                                    .set_context(token, parent_id, device_id);
+                            }
+                            return result
+                                .map(Message::PageMessage)
+                                .map(cosmic::Action::App);
+                        } else if let Some((result, None)) = sync_context {
                             return result
                                 .map(Message::PageMessage)
                                 .map(cosmic::Action::App);

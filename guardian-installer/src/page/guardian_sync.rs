@@ -79,7 +79,7 @@ impl super::Page for Page {
             .push(widget::text::body("✓ Perfect for multi-device families"))
             .push(widget::text::body("✓ End-to-end encrypted"));
 
-        let privacy = widget::text::caption(fl!("guardian-sync-page", "privacy"))
+        let privacy = widget::text::caption(fl!("guardian-sync-page", "privacy-note"))
             .apply(widget::container)
             .center_x(Length::Fill);
 
@@ -89,11 +89,11 @@ impl super::Page for Page {
                 .center_x(Length::Fill)
         });
 
-        let enable_button = widget::button::suggested(fl!("guardian-sync-page", "enable"))
+        let enable_button = widget::button::suggested(fl!("guardian-sync-page", "enable-sync"))
             .on_press_maybe((!self.loading).then_some(Message::EnableSync.into()))
             .width(Length::Fill);
 
-        let skip_button = widget::button::standard(fl!("guardian-sync-page", "skip"))
+        let skip_button = widget::button::standard(fl!("guardian-sync-page", "skip-sync"))
             .on_press_maybe((!self.loading).then_some(Message::SkipSync.into()))
             .width(Length::Fill);
 
