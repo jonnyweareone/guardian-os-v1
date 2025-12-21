@@ -32,7 +32,6 @@ pub struct Page {
     loading: bool,
     error_message: Option<String>,
     authenticated: bool,
-    // Auth state
     pub access_token: Option<String>,
     pub parent_id: Option<String>,
     pub parent_email: Option<String>,
@@ -40,12 +39,6 @@ pub struct Page {
 
 #[derive(Clone, Debug, Serialize)]
 struct SignInRequest {
-    email: String,
-    password: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-struct SignUpRequest {
     email: String,
     password: String,
 }
@@ -60,13 +53,6 @@ struct AuthResponse {
 struct AuthUser {
     id: String,
     email: String,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct AuthError {
-    error: Option<String>,
-    error_description: Option<String>,
-    msg: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -109,7 +95,6 @@ impl super::Page for Page {
     fn view(&self) -> Element<'_, super::Message> {
         let spacing = cosmic::theme::spacing();
         
-        // Mode toggle
         let mode_toggle = widget::row::with_capacity(2)
             .spacing(spacing.space_s)
             .push(
@@ -139,7 +124,6 @@ impl super::Page for Page {
             .apply(widget::container)
             .center_x(Length::Fill);
 
-        // Description text
         let description = widget::text::body(match self.mode {
             AuthMode::SignIn => fl!("guardian-auth-page", "sign-in-description"),
             AuthMode::CreateAccount => fl!("guardian-auth-page", "create-account-description"),
@@ -147,58 +131,24 @@ impl super::Page for Page {
         .apply(widget::container)
         .center_x(Length::Fill);
 
-        // Email input
         let email_input = widget::text_input(fl!("email-placeholder"), &self.email)
-            .label(fl!("email"))
             .on_input(|value| Message::SetEmail(value).into());
 
-        // Full name input (only for create account)
-        let full_name_input = if self.mode == AuthMode::CreateAccount {
-            Some(
-                widget::text_input(fl!("full-name-placeholder"), &self.full_name)
-                    .label(fl!("full-name"))
-                    .on_input(|value| Message::SetFullName(value).into())
-            )
-        } else {
-            None
-        };
-
-        // Password input
         let password_input = widget::secure_input(
             fl!("password-placeholder"),
             &self.password,
             Some(Message::TogglePasswordVisibility.into()),
             self.password_hidden,
         )
-        .label(fl!("password"))
         .on_input(|value| Message::SetPassword(value).into());
 
-        // Password confirm (only for create account)
-        let password_confirm_input = if self.mode == AuthMode::CreateAccount {
-            Some(
-                widget::secure_input(
-                    fl!("password-confirm-placeholder"),
-                    &self.password_confirm,
-                    None,
-                    self.password_hidden,
-                )
-                .label(fl!("password-confirm"))
-                .on_input(|value| Message::SetPasswordConfirm(value).into())
-            )
-        } else {
-            None
-        };
-
-        // Error message
         let error_widget = self.error_message.as_ref().map(|msg| {
             widget::text::body(msg)
-                .class(cosmic::theme::Text::Destructive)
                 .apply(widget::container)
                 .center_x(Length::Fill)
         });
 
-        // Submit button
-        let can_submit = self.can_submit();
+        let can_submit = !self.email.is_empty() && !self.password.is_empty() && !self.loading;
         let submit_text = if self.loading {
             fl!("loading")
         } else {
@@ -213,24 +163,14 @@ impl super::Page for Page {
             .apply(widget::container)
             .center_x(Length::Fill);
 
-        // Build the form
         let mut column = widget::column::with_capacity(10)
             .spacing(spacing.space_s)
             .push(mode_toggle)
             .push(widget::vertical_space().height(spacing.space_m))
             .push(description)
             .push(widget::vertical_space().height(spacing.space_s))
-            .push(email_input);
-
-        if let Some(input) = full_name_input {
-            column = column.push(input);
-        }
-
-        column = column.push(password_input);
-
-        if let Some(input) = password_confirm_input {
-            column = column.push(input);
-        }
+            .push(email_input)
+            .push(password_input);
 
         if let Some(error) = error_widget {
             column = column.push(error);
@@ -246,25 +186,6 @@ impl super::Page for Page {
 impl Page {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    fn can_submit(&self) -> bool {
-        if self.loading {
-            return false;
-        }
-
-        let email_valid = !self.email.is_empty() && self.email.contains('@');
-        let password_valid = self.password.len() >= 6;
-
-        match self.mode {
-            AuthMode::SignIn => email_valid && password_valid,
-            AuthMode::CreateAccount => {
-                email_valid 
-                    && password_valid 
-                    && self.password == self.password_confirm
-                    && !self.full_name.is_empty()
-            }
-        }
     }
 
     pub fn update(&mut self, message: Message) -> cosmic::Task<super::Message> {
@@ -283,11 +204,9 @@ impl Page {
             }
             Message::SetPasswordConfirm(password) => {
                 self.password_confirm = password;
-                self.error_message = None;
             }
             Message::SetFullName(name) => {
                 self.full_name = name;
-                self.error_message = None;
             }
             Message::TogglePasswordVisibility => {
                 self.password_hidden = !self.password_hidden;
@@ -301,12 +220,9 @@ impl Page {
                 let password = self.password.clone();
 
                 return cosmic::Task::future(async move {
-                    let result = match mode {
-                        AuthMode::SignIn => sign_in(&email, &password).await,
-                        AuthMode::CreateAccount => sign_up(&email, &password).await,
-                    };
+                    let result = sign_in(&email, &password).await;
                     Message::AuthResult(Arc::new(result))
-                });
+                }).map(super::Message::GuardianAuth);
             }
             Message::AuthResult(result) => {
                 self.loading = false;
@@ -344,52 +260,10 @@ async fn sign_in(email: &str, password: &str) -> Result<AuthResponse, String> {
         .map_err(|e| format!("Network error: {}", e))?;
 
     if response.status().is_success() {
-        response
-            .json::<AuthResponse>()
+        response.json::<AuthResponse>()
             .await
-            .map_err(|e| format!("Failed to parse response: {}", e))
+            .map_err(|e| format!("Parse error: {}", e))
     } else {
-        let error = response
-            .json::<AuthError>()
-            .await
-            .map_err(|e| format!("Failed to parse error: {}", e))?;
-        
-        Err(error.error_description
-            .or(error.msg)
-            .or(error.error)
-            .unwrap_or_else(|| "Authentication failed".to_string()))
-    }
-}
-
-async fn sign_up(email: &str, password: &str) -> Result<AuthResponse, String> {
-    let client = reqwest::Client::new();
-    
-    let response = client
-        .post(format!("{}/auth/v1/signup", SUPABASE_URL))
-        .header("apikey", SUPABASE_ANON_KEY)
-        .header("Content-Type", "application/json")
-        .json(&SignUpRequest {
-            email: email.to_string(),
-            password: password.to_string(),
-        })
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-
-    if response.status().is_success() {
-        response
-            .json::<AuthResponse>()
-            .await
-            .map_err(|e| format!("Failed to parse response: {}", e))
-    } else {
-        let error = response
-            .json::<AuthError>()
-            .await
-            .map_err(|e| format!("Failed to parse error: {}", e))?;
-        
-        Err(error.error_description
-            .or(error.msg)
-            .or(error.error)
-            .unwrap_or_else(|| "Registration failed".to_string()))
+        Err("Authentication failed".to_string())
     }
 }
