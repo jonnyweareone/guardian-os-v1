@@ -1,5 +1,19 @@
-cosmic-initial-setup (0.1.0) jammy; urgency=medium
+guardian-installer (1.1.0) noble; urgency=medium
 
-  * Initial release.
+  * Streamlined for Guardian OS v1.1.0
+  * English UK only - removed 60+ language packs
+  * Added Supabase authentication integration
+  * Added child profile selection/creation
+  * Added device registration flow
+  * Removed unused pages (launcher, workflow, etc.)
 
- -- Jeremy Soller <jeremy@system76.com>  Fri, 19 Jan 2024 11:59:56 -0700
+ -- Guardian Network Solutions <dev@guardian.network>  Sat, 21 Dec 2024 20:00:00 +0000
+
+guardian-installer (1.0.0) noble; urgency=medium
+
+  * Initial Guardian OS fork from cosmic-initial-setup
+  * Added guardian_auth page
+  * Added guardian_child page
+  * Added guardian_sync page
+
+ -- Guardian Network Solutions <dev@guardian.network>  Thu, 19 Dec 2024 12:00:00 +0000

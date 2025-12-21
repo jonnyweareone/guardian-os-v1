@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "purge" ] ; then
+    # Remove guardian-installer system user
+    if getent passwd guardian-installer >/dev/null && which deluser >/dev/null 2>&1; then
+        deluser --system guardian-installer || echo "Could not remove guardian-installer user."
+    fi
+    
+    # Note: Don't remove /etc/guardian - other guardian packages use it
+fi
+
+#DEBHELPER#
+exit 0

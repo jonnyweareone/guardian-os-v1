@@ -1,4 +1,5 @@
-// Copyright 2023 System76 <info@system76.com>
+// Guardian OS Installer
+// Copyright 2024 Guardian Network Solutions
 // SPDX-License-Identifier: GPL-3.0-only
 
 use std::any::TypeId;
@@ -22,12 +23,12 @@ mod localize;
 use self::page::Page;
 mod page;
 
-const COSMIC_SETUP_DONE_PATH: &str = ".config/cosmic-initial-setup-done";
-const GNOME_SETUP_DONE_PATH: &str = ".config/gnome-initial-setup-done";
+const GUARDIAN_SETUP_DONE_PATH: &str = ".config/guardian-setup-done";
 
 /// Runs application with these settings
 #[rustfmt::skip]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Check for disable file (used during live session)
     if let Some(file_path) = option_env!("DISABLE_IF_EXISTS") {
         if Path::new(file_path).exists() {
             return Ok(());
@@ -37,10 +38,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[allow(deprecated)]
     let home_dir = std::env::home_dir().unwrap();
 
-    if home_dir.join(COSMIC_SETUP_DONE_PATH).exists() {
+    // Check if setup already completed
+    if home_dir.join(GUARDIAN_SETUP_DONE_PATH).exists() {
         return Ok(());
     }
 
+    // Setup logging
     let log_level = std::env::var("RUST_LOG")
         .ok()
         .and_then(|level| level.parse::<tracing::Level>().ok())
@@ -60,7 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_filter(tracing_subscriber::filter::filter_fn(move |metadata| {
             let target = metadata.target();
             metadata.level() == &tracing::Level::ERROR
-                || (target.starts_with("cosmic_initial_setup")
+                || (target.starts_with("guardian_installer")
                     && metadata.level() <= &log_level)
         }));
 
@@ -68,13 +71,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     localize::localize();
 
-    // Decide which pages to display.
-    let mode = if home_dir.join(GNOME_SETUP_DONE_PATH).exists() {
-        page::AppMode::GnomeTransition
-    } else {
-        // If being run by the cosmic-initial-setup user, we are in OEM mode.
-        page::AppMode::NewInstall { create_user: pwd::Passwd::current_user().map_or(false, |current_user| current_user.name == "cosmic-initial-setup") }
-    };
+    // Determine which mode we're running in
+    let args: Vec<String> = std::env::args().collect();
+    let mode = determine_mode(&args);
 
     let mut settings = Settings::default();
     settings = settings.size_limits(Limits::NONE.max_width(900.0).max_height(650.0));
@@ -82,6 +81,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     cosmic::app::run::<App>(settings, mode)?;
 
     Ok(())
+}
+
+/// Determine which mode to run based on args and environment
+fn determine_mode(args: &[String]) -> page::AppMode {
+    // Check for explicit mode flags
+    if args.contains(&"--first-boot".to_string()) {
+        return page::AppMode::PostInstall;
+    }
+    
+    if args.contains(&"--live-install".to_string()) {
+        return page::AppMode::NewInstall { create_user: true };
+    }
+
+    // Check for live session marker
+    if Path::new("/etc/guardian/installer.conf").exists() {
+        // Read the config to check if we're in live session
+        if let Ok(content) = std::fs::read_to_string("/etc/guardian/installer.conf") {
+            if content.contains("LIVE_SESSION=true") {
+                return page::AppMode::NewInstall { create_user: true };
+            }
+        }
+    }
+
+    // Check if running as guardian-installer user (OEM mode)
+    let is_installer_user = pwd::Passwd::current_user()
+        .map_or(false, |user| user.name == "guardian-installer");
+    
+    if is_installer_user {
+        return page::AppMode::NewInstall { create_user: true };
+    }
+
+    // Default: post-install first boot wizard
+    page::AppMode::PostInstall
 }
 
 /// Messages that are used specifically by our [`App`].
@@ -99,23 +131,17 @@ pub struct App {
     core: Core,
     pages: IndexMap<TypeId, Box<dyn Page + 'static>>,
     page_i: usize,
-    oem_mode: bool,
+    is_live_install: bool,
     wifi_exists: bool,
 }
 
 /// Implement [`Application`] to integrate with COSMIC.
 impl Application for App {
-    /// Multithreaded async executor to use with the app.
     type Executor = executor::Default;
-
-    /// Argument received
     type Flags = page::AppMode;
-
-    /// Message type specific to our [`App`].
     type Message = Message;
 
-    /// The unique application ID to supply to the window manager.
-    const APP_ID: &'static str = "com.system76.CosmicInitialSetup";
+    const APP_ID: &'static str = "com.guardian.GuardianInstaller";
 
     fn core(&self) -> &Core {
         &self.core
@@ -125,19 +151,20 @@ impl Application for App {
         &mut self.core
     }
 
-    /// Creates the application, and optionally emits command on initialize.
     fn init(mut core: Core, mode: Self::Flags) -> (Self, Task<Message>) {
         core.window.show_headerbar = false;
         core.window.show_close = false;
         core.window.show_maximize = false;
         core.window.show_minimize = false;
 
+        let is_live_install = matches!(mode, page::AppMode::NewInstall { .. });
+
         let mut app = App {
             core,
-            oem_mode: matches!(mode, page::AppMode::NewInstall { create_user: true }),
+            is_live_install,
             pages: page::pages(mode),
             page_i: 0,
-            wifi_exists: true, // TODO: Detect
+            wifi_exists: true,
         };
 
         let tasks = app
@@ -155,7 +182,6 @@ impl Application for App {
         (app, tasks)
     }
 
-    /// Handle application events here.
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::None => {}
@@ -167,9 +193,7 @@ impl Application for App {
                     }
 
                     page::Message::Appearance(message) => {
-                        if let Some(page) =
-                            self.pages.get_mut(&TypeId::of::<page::appearance::Page>())
-                        {
+                        if let Some(page) = self.pages.get_mut(&TypeId::of::<page::appearance::Page>()) {
                             return page
                                 .as_any()
                                 .downcast_mut::<page::appearance::Page>()
@@ -181,9 +205,7 @@ impl Application for App {
                     }
 
                     page::Message::Keyboard(message) => {
-                        if let Some(page) =
-                            self.pages.get_mut(&TypeId::of::<page::keyboard::Page>())
-                        {
+                        if let Some(page) = self.pages.get_mut(&TypeId::of::<page::keyboard::Page>()) {
                             return page
                                 .as_any()
                                 .downcast_mut::<page::keyboard::Page>()
@@ -195,9 +217,7 @@ impl Application for App {
                     }
 
                     page::Message::Language(message) => {
-                        if let Some(page) =
-                            self.pages.get_mut(&TypeId::of::<page::language::Page>())
-                        {
+                        if let Some(page) = self.pages.get_mut(&TypeId::of::<page::language::Page>()) {
                             return page
                                 .as_any()
                                 .downcast_mut::<page::language::Page>()
@@ -209,25 +229,10 @@ impl Application for App {
                     }
 
                     page::Message::Layout(message) => {
-                        if let Some(page) = self.pages.get_mut(&TypeId::of::<page::layout::Page>())
-                        {
+                        if let Some(page) = self.pages.get_mut(&TypeId::of::<page::layout::Page>()) {
                             return page
                                 .as_any()
                                 .downcast_mut::<page::layout::Page>()
-                                .unwrap()
-                                .update(message)
-                                .map(Message::PageMessage)
-                                .map(cosmic::Action::App);
-                        }
-                    }
-
-                    page::Message::Location(message) => {
-                        if let Some(page) =
-                            self.pages.get_mut(&TypeId::of::<page::location::Page>())
-                        {
-                            return page
-                                .as_any()
-                                .downcast_mut::<page::location::Page>()
                                 .unwrap()
                                 .update(message)
                                 .map(Message::PageMessage)
@@ -248,9 +253,7 @@ impl Application for App {
                     }
 
                     page::Message::Welcome(message) => {
-                        if let Some(page) = self.pages.get_mut(&TypeId::of::<page::welcome::Page>())
-                        {
-                            // eprintln!("type id = {:?}", page.type_id());
+                        if let Some(page) = self.pages.get_mut(&TypeId::of::<page::welcome::Page>()) {
                             return page
                                 .as_any()
                                 .downcast_mut::<page::welcome::Page>()
@@ -282,12 +285,10 @@ impl Application for App {
                             
                             let result = auth_page.update(message);
                             
-                            // Extract auth context after update
-                            let auth_context = auth_page.access_token.clone()
-                                .zip(auth_page.parent_id.clone());
-                            
                             // Pass auth context to child page when auth completes
-                            if let Some((token, parent_id)) = auth_context {
+                            if let (Some(token), Some(parent_id)) = 
+                                (auth_page.access_token.clone(), auth_page.parent_id.clone()) 
+                            {
                                 if let Some(child_page) = self.pages.get_mut(&TypeId::of::<page::guardian_child::Page>()) {
                                     child_page
                                         .as_any()
@@ -304,8 +305,7 @@ impl Application for App {
                     }
 
                     page::Message::GuardianChild(message) => {
-                        // First, update the child page and extract context if needed
-                        let sync_context = if let Some(page) = self.pages.get_mut(&TypeId::of::<page::guardian_child::Page>()) {
+                        if let Some(page) = self.pages.get_mut(&TypeId::of::<page::guardian_child::Page>()) {
                             let child_page = page
                                 .as_any()
                                 .downcast_mut::<page::guardian_child::Page>()
@@ -313,39 +313,23 @@ impl Application for App {
                             
                             let result = child_page.update(message);
                             
-                            // Extract context if device is claimed
-                            let context = if child_page.device_claimed {
+                            // Pass context to sync page if device is claimed
+                            if child_page.device_claimed {
                                 if let (Some(token), Some(parent_id), Some(device_id)) = (
                                     child_page.access_token.clone(),
                                     child_page.parent_id.clone(),
                                     child_page.device_id.clone(),
                                 ) {
-                                    Some((token, parent_id, device_id))
-                                } else {
-                                    None
+                                    if let Some(sync_page) = self.pages.get_mut(&TypeId::of::<page::guardian_sync::Page>()) {
+                                        sync_page
+                                            .as_any()
+                                            .downcast_mut::<page::guardian_sync::Page>()
+                                            .unwrap()
+                                            .set_context(token, parent_id, device_id);
+                                    }
                                 }
-                            } else {
-                                None
-                            };
-                            
-                            Some((result, context))
-                        } else {
-                            None
-                        };
-                        
-                        // Now pass context to sync page if we have it
-                        if let Some((result, Some((token, parent_id, device_id)))) = sync_context {
-                            if let Some(sync_page) = self.pages.get_mut(&TypeId::of::<page::guardian_sync::Page>()) {
-                                sync_page
-                                    .as_any()
-                                    .downcast_mut::<page::guardian_sync::Page>()
-                                    .unwrap()
-                                    .set_context(token, parent_id, device_id);
                             }
-                            return result
-                                .map(Message::PageMessage)
-                                .map(cosmic::Action::App);
-                        } else if let Some((result, None)) = sync_context {
+                            
                             return result
                                 .map(Message::PageMessage)
                                 .map(cosmic::Action::App);
@@ -377,13 +361,14 @@ impl Application for App {
             }
 
             Message::Finish => {
-                let mark_initial_setup_finish = cosmic::Task::future(async {
+                // Mark setup as complete
+                let mark_setup_done = cosmic::Task::future(async {
                     #[allow(deprecated)]
                     let home = std::env::home_dir().unwrap();
-                    _ = std::fs::File::create(home.join(COSMIC_SETUP_DONE_PATH));
-                })
-                .discard();
+                    _ = std::fs::File::create(home.join(GUARDIAN_SETUP_DONE_PATH));
+                }).discard();
 
+                // Apply all page settings
                 let mut tasks = self
                     .pages
                     .values_mut()
@@ -394,19 +379,18 @@ impl Application for App {
                                 .map(cosmic::Action::App)
                         })
                     })
-                    .chain(std::iter::once(mark_initial_setup_finish))
+                    .chain(std::iter::once(mark_setup_done))
                     .collect::<Vec<_>>()
                     .apply(Task::batch);
 
-                if self.oem_mode {
-                    // Automatically log out from the OEM mode after tasks are finished.
+                // If live install mode, log out the installer user
+                if self.is_live_install {
                     tasks = tasks.chain(
                         cosmic::Task::future(async {
                             _ = std::process::Command::new("loginctl")
-                                .args(&["terminate-user", "cosmic-initial-setup"])
+                                .args(&["terminate-user", "guardian-installer"])
                                 .status();
-                        })
-                        .discard(),
+                        }).discard(),
                     );
                 }
 
@@ -426,7 +410,6 @@ impl Application for App {
             .map(|dialog| dialog.map(Message::PageMessage))
     }
 
-    /// Creates a view after each update.
     fn view(&self) -> Element<'_, Message> {
         let cosmic_theme::Spacing {
             space_xxs,
@@ -504,7 +487,6 @@ impl Application for App {
 
     fn subscription(&self) -> Subscription<Self::Message> {
         let mut subscriptions = vec![
-            // Make the screen reader toggleable.
             cosmic_settings_subscriptions::accessibility::subscription().map(|m| {
                 Message::PageMessage(page::Message::Welcome(
                     page::welcome::Message::ScreenReaderDbus(m),
@@ -512,7 +494,6 @@ impl Application for App {
             }),
         ];
 
-        // Listen for WiFi devices if a WiFi device was found.
         if self.wifi_exists {
             subscriptions.push(Subscription::run(network_manager_stream));
         }
@@ -525,7 +506,6 @@ fn network_manager_stream() -> impl Stream<Item = Message> {
     use cosmic_settings_subscriptions::network_manager;
     cosmic::iced_futures::stream::channel(1, |mut output| async move {
         let conn = zbus::Connection::system().await.unwrap();
-
         let (tx, mut rx) = futures::channel::mpsc::channel(1);
 
         let watchers = std::pin::pin!(async move {

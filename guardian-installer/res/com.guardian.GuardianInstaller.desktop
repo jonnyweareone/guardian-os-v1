@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Guardian Setup
+Icon=com.guardian.GuardianInstaller
+Exec=guardian-installer
+Terminal=false
+Type=Application
+StartupNotify=true
+Categories=COSMIC;System
+OnlyShowIn=COSMIC
+NoDisplay=true
+X-GNOME-HiddenUnderSystemd=@systemd_hidden@
+StartupWMClass=com.guardian.GuardianInstaller

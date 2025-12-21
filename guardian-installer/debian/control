@@ -1,7 +1,7 @@
-Source: cosmic-initial-setup
+Source: guardian-installer
 Section: admin
 Priority: optional
-Maintainer: Jeremy Soller <jeremy@system76.com>
+Maintainer: Guardian Network Solutions <dev@guardian.network>
 Build-Depends:
     debhelper-compat (=13),
     git,
@@ -14,24 +14,23 @@ Build-Depends:
     pkg-config,
     rust-all,
 Standards-Version: 4.6.2
-Homepage: https://github.com/pop-os/cosmic-initial-setup
+Homepage: https://github.com/guardian-network/guardian-os
 
-Package: cosmic-initial-setup
+Package: guardian-installer
 Architecture: amd64 arm64
 Depends:
-    appstream-data-pop,
-    apt-config-icons,
-    apt-config-icons-hidpi,
-    apt-config-icons-large,
-    apt-config-icons-large-hidpi,
     cosmic-icons,
+    guardian-daemon,
     ${misc:Depends},
     ${shlibs:Depends}
-Description: COSMIC Initial Setup
+Description: Guardian OS Installer
+ Initial setup wizard for Guardian OS with parent authentication,
+ child profile selection, and device registration.
 
-Package: cosmic-initial-setup-casper
+Package: guardian-installer-casper
 Architecture: amd64 arm64
 Priority: extra
 Depends: casper
-Description: Disable COSMIC Initial Setup in casper
- Disable COSMIC Initial Setup when running in a live system with casper
+Description: Guardian Installer casper integration
+ Configures Guardian Installer to run during live ISO installation.
+ Disables post-install setup wizard during live session.

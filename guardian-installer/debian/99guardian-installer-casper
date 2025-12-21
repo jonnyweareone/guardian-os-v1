@@ -1,0 +1,30 @@
+#!/bin/sh
+
+PREREQ=""
+DESCRIPTION="Configuring Guardian Installer for live session..."
+
+prereqs()
+{
+       echo "$PREREQ"
+}
+
+case $1 in
+# get pre-requisites
+prereqs)
+       prereqs
+       exit 0
+       ;;
+esac
+
+. /scripts/casper-functions
+
+log_begin_msg "$DESCRIPTION"
+
+# Disable post-install wizard during live session (will run on first boot after install)
+rm -f /root/etc/xdg/autostart/com.guardian.GuardianInstaller.Autostart.desktop
+
+# Enable live installer mode
+mkdir -p /root/etc/guardian
+echo "LIVE_SESSION=true" > /root/etc/guardian/installer.conf
+
+log_end_msg

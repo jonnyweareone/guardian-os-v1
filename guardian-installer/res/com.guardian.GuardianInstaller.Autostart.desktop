@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Guardian Setup
+Exec=guardian-installer --first-boot
+NoDisplay=true
+Terminal=false
+StartupNotify=true
+StartupWMClass=com.guardian.GuardianInstaller
+OnlyShowIn=COSMIC

@@ -1,2 +1,0 @@
-back = Zurück
-cancel = Abbrechen

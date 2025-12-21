@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+# Create guardian-installer system user for running setup
+getent passwd guardian-installer >/dev/null || adduser --system --force-badname --quiet \
+    --home /run/guardian-installer/ --no-create-home --shell /bin/bash guardian-installer
+
+# Create guardian config directory
+mkdir -p /etc/guardian
+chmod 755 /etc/guardian
+
+#DEBHELPER#
+exit 0

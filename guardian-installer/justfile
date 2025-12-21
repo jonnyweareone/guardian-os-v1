@@ -3,12 +3,12 @@ set unstable
 # The cargo module contains cargo recipes shared by all cosmic projects.
 mod? cargo 'cargo.just'
 
-name := 'cosmic-initial-setup'
-appid := 'com.system76.CosmicInitialSetup'
+name := 'guardian-installer'
+appid := 'com.guardian.GuardianInstaller'
 rootdir := ''
 prefix := '/usr'
 
-# An optional file that when set will prevent initial-setup from loading
+# An optional file that when set will prevent installer from loading
 disable-if-exists := ''
 export DISABLE_IF_EXISTS := disable-if-exists || env('DISABLE_IF_EXISTS', '')
 
@@ -16,14 +16,15 @@ export DISABLE_IF_EXISTS := disable-if-exists || env('DISABLE_IF_EXISTS', '')
 base-dir := absolute_path(clean(rootdir / prefix))
 cargo-target-dir := env('CARGO_TARGET_DIR', 'target')
 desktop-entry := appid + '.desktop'
-autostart-dst := rootdir / 'etc' / 'xdg' / 'autostart' / desktop-entry
+autostart-dst := rootdir / 'etc' / 'xdg' / 'autostart' / appid + '.Autostart.desktop'
 autostart-entry := appid + '.Autostart.desktop'
 bin-dst := base-dir / 'bin' / name
 desktop-dst := base-dir / 'share' / 'applications' / desktop-entry
 icon-dst := base-dir / 'share' / 'icons' / 'hicolor' / 'scalable' / 'apps' / appid + '.svg'
 layouts-dst := base-dir / 'share' / 'cosmic-layouts'
-polkit-rules-dst := base-dir / 'share' / 'polkit-1' / 'rules.d' / '20-cosmic-initial-setup.rules'
+polkit-rules-dst := base-dir / 'share' / 'polkit-1' / 'rules.d' / '20-guardian-installer.rules'
 themes-dst := base-dir / 'share' / 'cosmic-themes'
+guardian-config-dst := rootdir / 'etc' / 'guardian'
 
 # Default recipe which runs `just cargo build-release`
 default: fetch
@@ -47,7 +48,7 @@ clean: fetch
 
 # Installs files
 install:
-    mkdir -p {{layouts-dst}} {{themes-dst}}
+    mkdir -p {{layouts-dst}} {{themes-dst}} {{guardian-config-dst}}
     install -Dm0755 {{ cargo-target-dir / 'release' / name }} '{{bin-dst}}'
     install -Dm0644 res/icon.svg '{{icon-dst}}'
     install -Dm0644 {{ 'res' / desktop-entry }} '{{desktop-dst}}'
