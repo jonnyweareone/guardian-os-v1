@@ -16,7 +16,7 @@ PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 # Configuration
 POP_VERSION="24.04"
 POP_ISO_URL="https://iso.pop-os.org/24.04/amd64/intel/20/pop-os_24.04_amd64_intel_20.iso"
-GUARDIAN_VERSION="1.0.2"
+GUARDIAN_VERSION="1.0.3"
 
 # Directories
 WORK_DIR="/opt/guardian-iso-build"
@@ -48,7 +48,7 @@ print_banner() {
 ║  ██║   ██║██║   ██║██╔══██║██╔══██╗██║  ██║██║██╔══██║██║╚██╗██║  ║
 ║  ╚██████╔╝╚██████╔╝██║  ██║██║  ██║██████╔╝██║██║  ██║██║ ╚████║  ║
 ║   ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝  ║
-║                         OS  v1.0.2                                ║
+║                         OS  v1.0.3                                ║
 ║                                                                   ║
 ║            AI Powered Protection For Families                     ║
 ║            Built on Pop!_OS 24.04 LTS + COSMIC                    ║
@@ -196,6 +196,120 @@ EOF
     dpkg-deb --build "$deb_dir" "${pkg_dir}/guardian-installer_${GUARDIAN_VERSION}_amd64.deb"
     
     success "guardian-installer package built"
+}
+
+build_guardian_daemon() {
+    log "Building guardian-daemon (background service)..."
+    
+    local daemon_dir="${PROJECT_ROOT}/guardian-components/guardian-daemon"
+    local pkg_dir="${WORK_DIR}/packages"
+    mkdir -p "$pkg_dir"
+    
+    if [ ! -d "$daemon_dir" ]; then
+        warn "guardian-daemon directory not found, skipping"
+        return
+    fi
+    
+    cd "$daemon_dir"
+    
+    # Build release binary
+    log "Compiling guardian-daemon..."
+    source "$HOME/.cargo/env" 2>/dev/null || true
+    cargo build --release
+    
+    if [ ! -f "target/release/guardian-daemon" ]; then
+        warn "guardian-daemon build failed, skipping"
+        return
+    fi
+    
+    # Create .deb package
+    log "Creating guardian-daemon .deb package..."
+    local deb_dir="${WORK_DIR}/guardian-daemon-deb"
+    rm -rf "$deb_dir"
+    mkdir -p "$deb_dir/DEBIAN"
+    mkdir -p "$deb_dir/usr/bin"
+    mkdir -p "$deb_dir/etc/guardian"
+    mkdir -p "$deb_dir/var/lib/guardian"
+    mkdir -p "$deb_dir/lib/systemd/system"
+    
+    # Copy binary
+    cp "target/release/guardian-daemon" "$deb_dir/usr/bin/guardian-daemon"
+    chmod 755 "$deb_dir/usr/bin/guardian-daemon"
+    
+    # Create default config
+    cat > "$deb_dir/etc/guardian/daemon.toml" << 'DAEMONCONF'
+# Guardian Daemon Configuration
+# This file is auto-generated during setup
+
+[general]
+data_dir = "/var/lib/guardian"
+
+[supabase]
+url = "https://gkyspvcafyttfhyjryyk.supabase.co"
+
+[sync]
+enabled = true
+sync_server_url = "https://sync.gameguardian.ai:443"
+sync_interval_secs = 60
+heartbeat_interval_secs = 300
+
+[features]
+url_logging_enabled = true
+app_tracking_enabled = true
+screen_time_enabled = true
+ai_classification_enabled = false
+DAEMONCONF
+    
+    # Create systemd service
+    cat > "$deb_dir/lib/systemd/system/guardian-daemon.service" << 'SYSTEMD'
+[Unit]
+Description=Guardian OS Safety Daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/guardian-daemon
+Restart=always
+RestartSec=10
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target
+SYSTEMD
+    
+    # Create control file
+    cat > "$deb_dir/DEBIAN/control" << EOF
+Package: guardian-daemon
+Version: ${GUARDIAN_VERSION}
+Section: admin
+Priority: optional
+Architecture: amd64
+Depends: libssl3, libdbus-1-3
+Maintainer: Guardian OS Team <support@gameguardian.ai>
+Description: Guardian OS Safety Daemon
+ Background service for Guardian OS that provides:
+ - Device registration and activation
+ - Screen time tracking and enforcement
+ - Application usage monitoring
+ - Real-time sync with Guardian Cloud
+ - Parental control enforcement
+EOF
+    
+    # Create postinst script to enable service
+    cat > "$deb_dir/DEBIAN/postinst" << 'POSTINST'
+#!/bin/bash
+set -e
+systemctl daemon-reload
+systemctl enable guardian-daemon
+echo "Guardian Daemon installed. It will start after device activation."
+POSTINST
+    chmod 755 "$deb_dir/DEBIAN/postinst"
+    
+    # Build the deb
+    dpkg-deb --build "$deb_dir" "${pkg_dir}/guardian-daemon_${GUARDIAN_VERSION}_amd64.deb"
+    
+    success "guardian-daemon package built"
 }
 
 extract_iso() {
@@ -429,6 +543,7 @@ main() {
     check_deps
     download_pop_iso
     build_guardian_installer
+    build_guardian_daemon
     extract_iso
     inject_guardian
     apply_branding
