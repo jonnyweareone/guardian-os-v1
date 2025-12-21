@@ -1,0 +1,73 @@
+# Guardian DNS Configuration
+# Safe browsing DNS filter for Guardian OS
+
+[server]
+# Address to listen on (use 127.0.0.1:53 for local, 0.0.0.0:53 for network)
+listen_addr = "127.0.0.1:53"
+
+# Upstream DNS servers (Cloudflare Family by default - blocks malware + adult)
+upstream_dns = ["1.1.1.3", "1.0.0.3"]
+
+# DNS cache settings
+cache_size = 10000
+cache_ttl = 300
+
+[safesearch]
+# Enable safe search enforcement
+enabled = true
+
+# Force Google SafeSearch
+google = true
+
+# Force Bing SafeSearch  
+bing = true
+
+# YouTube restriction mode: "strict", "moderate", or "off"
+youtube = "moderate"
+
+# Force DuckDuckGo SafeSearch
+duckduckgo = true
+
+[blocking]
+# Categories to always block (regardless of child settings)
+always_block = ["adult", "malware", "gambling"]
+
+# Blocklist sources (auto-updated daily)
+blocklists = [
+    "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
+]
+
+# Custom domains to block
+custom_block = [
+    # Add your own blocked domains here
+    # "example-bad-site.com",
+]
+
+# Domains to never block (whitelist)
+whitelist = [
+    # Add domains to whitelist here
+    # "educational-site.com",
+]
+
+[vpn_detection]
+# Enable VPN/proxy detection
+enabled = true
+
+# Block known VPN provider domains
+block_vpn_domains = true
+
+# Block DNS-over-HTTPS providers (prevents DNS bypass)
+block_doh = true
+
+# Alert parent when VPN/proxy attempt is detected
+alert_on_attempt = true
+
+[logging]
+# Enable DNS query logging
+enabled = true
+
+# Days to retain logs (auto-cleanup)
+retention_days = 30
+
+# Path to query log database
+log_path = "/var/lib/guardian/dns/queries.db"
