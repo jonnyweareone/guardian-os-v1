@@ -1,31 +1,33 @@
-// Guardian OS Installer - Page Module
-// Two modes: Live Install (pre-install) and Post-Install (first boot)
+// Guardian OS Post-Install Wizard
+// Runs on FIRST BOOT after installation
+// Simple customization - device already registered during install
 
 use cosmic::{Element, widget};
 use indexmap::IndexMap;
 use std::any::{Any, TypeId};
 
 pub mod appearance;
-pub mod guardian_auth;
-pub mod guardian_child;
-pub mod guardian_sync;
 pub mod keyboard;
 pub mod language;
 pub mod layout;
-pub mod user;
 pub mod welcome;
 pub mod wifi;
 
+// Guardian auth pages - ONLY used if device wasn't registered during install
+pub mod guardian_auth;
+pub mod guardian_child;
+pub mod guardian_sync;
+pub mod user;
+
 /// Application modes
 pub enum AppMode {
-    /// Live ISO installation - Guardian auth flow + user creation
-    /// This runs during the live session BEFORE installation
-    NewInstall {
-        create_user: bool,
-    },
-    /// Post-install first boot wizard - just customization
-    /// This runs on FIRST BOOT after installation completes
+    /// Normal first-boot wizard (device already registered during install)
+    /// Simple customization only
     PostInstall,
+    
+    /// Fallback mode if device wasn't registered during installation
+    /// Full Guardian auth flow
+    UnregisteredDevice,
 }
 
 /// Build the page list based on mode
@@ -35,82 +37,9 @@ pub fn pages(mode: AppMode) -> IndexMap<TypeId, Box<dyn Page>> {
     
     match mode {
         // ============================================
-        // LIVE INSTALL MODE (Pre-install from live ISO)
+        // NORMAL POST-INSTALL (Device already registered)
         // ============================================
-        // Flow: Welcome → WiFi → Language → Keyboard → 
-        //       Guardian Auth → Child Selection → User Creation → Sync
-        // After this, pop-installer handles disk partitioning
-        AppMode::NewInstall { create_user } => {
-            // 1. Welcome - accessibility options
-            pages.insert(
-                TypeId::of::<welcome::Page>(),
-                Box::new(welcome::Page::new()),
-            );
-
-            // 2. WiFi connection (optional but recommended for auth)
-            pages.insert(
-                TypeId::of::<wifi::Page>(),
-                Box::new(wifi::Page::default()),
-            );
-
-            // 3. Language - default to English UK
-            pages.insert(
-                TypeId::of::<language::Page>(),
-                Box::new(language::Page::new()),
-            );
-
-            // 4. Keyboard layout
-            pages.insert(
-                TypeId::of::<keyboard::Page>(),
-                Box::new(keyboard::Page::new()),
-            );
-
-            // === GUARDIAN AUTHENTICATION FLOW ===
-            
-            // 5. Parent Authentication (REQUIRED)
-            // Parent signs in/creates Guardian account
-            // This proves they have authority to set up the device
-            pages.insert(
-                TypeId::of::<guardian_auth::Page>(),
-                Box::new(guardian_auth::Page::new()),
-            );
-
-            // 6. Child Profile Selection (REQUIRED)
-            // Select existing child or create new profile
-            // Links device to specific child
-            pages.insert(
-                TypeId::of::<guardian_child::Page>(),
-                Box::new(guardian_child::Page::new()),
-            );
-
-            // 7. User Account Creation
-            // Creates the local Linux user account
-            // Auto-filled from child profile name
-            // Limited permissions (not sudo)
-            if create_user {
-                pages.insert(
-                    TypeId::of::<user::Page>(),
-                    Box::new(user::Page::default()),
-                );
-            }
-
-            // 8. Sync Enrollment (optional)
-            // Enable settings sync across devices
-            pages.insert(
-                TypeId::of::<guardian_sync::Page>(),
-                Box::new(guardian_sync::Page::new()),
-            );
-            
-            // Note: After this wizard completes, the actual disk installation
-            // is handled by pop-installer/distinst. This wizard just collects
-            // the user information and Guardian credentials.
-        }
-        
-        // ============================================
-        // POST-INSTALL MODE (First boot after installation)
-        // ============================================
-        // Flow: Welcome → Appearance → Layout
-        // Simple customization wizard - device is already set up
+        // Simple customization wizard
         AppMode::PostInstall => {
             // 1. Welcome to Guardian OS
             pages.insert(
@@ -118,20 +47,67 @@ pub fn pages(mode: AppMode) -> IndexMap<TypeId, Box<dyn Page>> {
                 Box::new(welcome::Page::new()),
             );
 
-            // 2. Appearance - theme, accent colors
+            // 2. WiFi (connect for updates)
+            pages.insert(
+                TypeId::of::<wifi::Page>(),
+                Box::new(wifi::Page::default()),
+            );
+
+            // 3. Appearance - theme, accent colours
             pages.insert(
                 TypeId::of::<appearance::Page>(),
                 Box::new(appearance::Page::new()),
             );
 
-            // 3. Layout - panel position, dock
+            // 4. Layout - panel position, dock
             pages.insert(
                 TypeId::of::<layout::Page>(),
                 Box::new(layout::Page::default()),
             );
-            
-            // That's it! Device is already registered,
-            // child profile is linked, daemon is running.
+        }
+        
+        // ============================================
+        // UNREGISTERED DEVICE (Fallback - shouldn't normally happen)
+        // ============================================
+        // Full Guardian registration flow
+        // This runs if installation happened without Guardian auth
+        AppMode::UnregisteredDevice => {
+            pages.insert(
+                TypeId::of::<welcome::Page>(),
+                Box::new(welcome::Page::new()),
+            );
+
+            pages.insert(
+                TypeId::of::<wifi::Page>(),
+                Box::new(wifi::Page::default()),
+            );
+
+            // Guardian auth flow (fallback)
+            pages.insert(
+                TypeId::of::<guardian_auth::Page>(),
+                Box::new(guardian_auth::Page::new()),
+            );
+
+            pages.insert(
+                TypeId::of::<guardian_child::Page>(),
+                Box::new(guardian_child::Page::new()),
+            );
+
+            pages.insert(
+                TypeId::of::<guardian_sync::Page>(),
+                Box::new(guardian_sync::Page::new()),
+            );
+
+            // Appearance customization
+            pages.insert(
+                TypeId::of::<appearance::Page>(),
+                Box::new(appearance::Page::new()),
+            );
+
+            pages.insert(
+                TypeId::of::<layout::Page>(),
+                Box::new(layout::Page::default()),
+            );
         }
     }
 

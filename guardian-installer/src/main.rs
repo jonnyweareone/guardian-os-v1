@@ -1,4 +1,4 @@
-// Guardian OS Installer
+// Guardian OS Post-Install Wizard
 // Copyright 2024 Guardian Network Solutions
 // SPDX-License-Identifier: GPL-3.0-only
 
@@ -24,11 +24,10 @@ use self::page::Page;
 mod page;
 
 const GUARDIAN_SETUP_DONE_PATH: &str = ".config/guardian-setup-done";
+const GUARDIAN_DEVICE_REGISTERED: &str = "/etc/guardian/device.conf";
 
-/// Runs application with these settings
-#[rustfmt::skip]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Check for disable file (used during live session)
+    // Check for disable file
     if let Some(file_path) = option_env!("DISABLE_IF_EXISTS") {
         if Path::new(file_path).exists() {
             return Ok(());
@@ -71,9 +70,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     localize::localize();
 
-    // Determine which mode we're running in
-    let args: Vec<String> = std::env::args().collect();
-    let mode = determine_mode(&args);
+    // Determine mode based on device registration state
+    let mode = if Path::new(GUARDIAN_DEVICE_REGISTERED).exists() {
+        // Device was registered during installation - simple customization
+        page::AppMode::PostInstall
+    } else {
+        // Device not registered - need full Guardian auth flow
+        // This is a fallback for manual installs or recovery
+        page::AppMode::UnregisteredDevice
+    };
 
     let mut settings = Settings::default();
     settings = settings.size_limits(Limits::NONE.max_width(900.0).max_height(650.0));
@@ -83,40 +88,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Determine which mode to run based on args and environment
-fn determine_mode(args: &[String]) -> page::AppMode {
-    // Check for explicit mode flags
-    if args.contains(&"--first-boot".to_string()) {
-        return page::AppMode::PostInstall;
-    }
-    
-    if args.contains(&"--live-install".to_string()) {
-        return page::AppMode::NewInstall { create_user: true };
-    }
-
-    // Check for live session marker
-    if Path::new("/etc/guardian/installer.conf").exists() {
-        // Read the config to check if we're in live session
-        if let Ok(content) = std::fs::read_to_string("/etc/guardian/installer.conf") {
-            if content.contains("LIVE_SESSION=true") {
-                return page::AppMode::NewInstall { create_user: true };
-            }
-        }
-    }
-
-    // Check if running as guardian-installer user (OEM mode)
-    let is_installer_user = pwd::Passwd::current_user()
-        .map_or(false, |user| user.name == "guardian-installer");
-    
-    if is_installer_user {
-        return page::AppMode::NewInstall { create_user: true };
-    }
-
-    // Default: post-install first boot wizard
-    page::AppMode::PostInstall
-}
-
-/// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
 pub enum Message {
     None,
@@ -126,16 +97,13 @@ pub enum Message {
     PageOpen(usize),
 }
 
-/// The [`App`] stores application-specific state.
 pub struct App {
     core: Core,
     pages: IndexMap<TypeId, Box<dyn Page + 'static>>,
     page_i: usize,
-    is_live_install: bool,
     wifi_exists: bool,
 }
 
-/// Implement [`Application`] to integrate with COSMIC.
 impl Application for App {
     type Executor = executor::Default;
     type Flags = page::AppMode;
@@ -157,11 +125,8 @@ impl Application for App {
         core.window.show_maximize = false;
         core.window.show_minimize = false;
 
-        let is_live_install = matches!(mode, page::AppMode::NewInstall { .. });
-
         let mut app = App {
             core,
-            is_live_install,
             pages: page::pages(mode),
             page_i: 0,
             wifi_exists: true,
@@ -285,7 +250,6 @@ impl Application for App {
                             
                             let result = auth_page.update(message);
                             
-                            // Pass auth context to child page when auth completes
                             if let (Some(token), Some(parent_id)) = 
                                 (auth_page.access_token.clone(), auth_page.parent_id.clone()) 
                             {
@@ -313,7 +277,6 @@ impl Application for App {
                             
                             let result = child_page.update(message);
                             
-                            // Pass context to sync page if device is claimed
                             if child_page.device_claimed {
                                 if let (Some(token), Some(parent_id), Some(device_id)) = (
                                     child_page.access_token.clone(),
@@ -361,15 +324,13 @@ impl Application for App {
             }
 
             Message::Finish => {
-                // Mark setup as complete
                 let mark_setup_done = cosmic::Task::future(async {
                     #[allow(deprecated)]
                     let home = std::env::home_dir().unwrap();
                     _ = std::fs::File::create(home.join(GUARDIAN_SETUP_DONE_PATH));
                 }).discard();
 
-                // Apply all page settings
-                let mut tasks = self
+                let tasks = self
                     .pages
                     .values_mut()
                     .filter_map(|page| {
@@ -382,17 +343,6 @@ impl Application for App {
                     .chain(std::iter::once(mark_setup_done))
                     .collect::<Vec<_>>()
                     .apply(Task::batch);
-
-                // If live install mode, log out the installer user
-                if self.is_live_install {
-                    tasks = tasks.chain(
-                        cosmic::Task::future(async {
-                            _ = std::process::Command::new("loginctl")
-                                .args(&["terminate-user", "guardian-installer"])
-                                .status();
-                        }).discard(),
-                    );
-                }
 
                 return tasks.chain(cosmic::Task::done(Message::Exit.into()));
             }

@@ -1,43 +1,65 @@
-# Guardian OS Installer
+# Guardian OS Post-Install Wizard
 
-A streamlined Rust/COSMIC-based installer for Guardian OS, the family-safe Linux distribution.
+A Rust/COSMIC-based first-boot wizard for Guardian OS.
 
-## Overview
+## Purpose
 
-Guardian Installer handles the initial setup of Guardian OS devices, including:
+This is the **POST-INSTALL** wizard that runs on first boot after Guardian OS is installed.
+It handles simple desktop customization - the main Guardian authentication happens during 
+the actual installation (in pop-installer).
 
-1. **Parent Authentication** - Sign in with Guardian account (Supabase auth)
-2. **Child Profile Selection** - Choose or create a child profile for the device
-3. **User Account Creation** - Create local user account (auto-filled from child profile)
-4. **Device Registration** - Link device to parent's Guardian dashboard
-5. **Optional Sync Enrollment** - Enable settings synchronization
+## Modes
+
+### Normal Mode (PostInstall)
+When device was properly registered during installation:
+```
+Welcome → WiFi → Appearance → Layout → Done
+```
+
+### Fallback Mode (UnregisteredDevice)  
+If device wasn't registered during installation (manual install, recovery, etc.):
+```
+Welcome → WiFi → Guardian Auth → Child Selection → Sync → Appearance → Layout → Done
+```
 
 ## Architecture
 
-This is a fork of [cosmic-initial-setup](https://github.com/pop-os/cosmic-initial-setup) with Guardian-specific authentication flow integrated.
+| Component | Language | When | Purpose |
+|-----------|----------|------|---------|
+| **pop-installer** | Vala/GTK | Live ISO | Install OS + Guardian auth |
+| **guardian-installer** (this) | Rust/COSMIC | First boot | Desktop customization |
 
-### Pages
+## The Installation Flow
 
-| Page | Purpose | Required |
-|------|---------|----------|
-| `welcome` | Accessibility options, interface scaling | ✓ |
-| `wifi` | Network connection | Optional |
-| `language` | Language selection (EN-GB default) | ✓ |
-| `keyboard` | Keyboard layout | ✓ |
-| `guardian_auth` | Parent sign-in/registration | ✓ |
-| `guardian_child` | Child profile selection | ✓ |
-| `user` | Local account creation | ✓ |
-| `guardian_sync` | Settings sync enrollment | Optional |
-| `appearance` | Theme customization | ✓ |
-| `layout` | Panel/dock layout | ✓ |
-
-### Supabase Integration
-
-Guardian Installer connects to the Guardian Network Supabase project:
-
-- **Project**: `gkyspvcafyttfhyjryyk` (guardianos, eu-west-2)
-- **Auth**: Email/password via Supabase Auth
-- **API**: REST endpoints for device registration and child management
+```
+LIVE ISO SESSION:
+┌─────────────────────────────┐
+│   pop-installer (Vala)      │
+│                             │
+│   1. Language               │
+│   2. Keyboard               │
+│   3. Try/Install            │
+│   4. GUARDIAN AUTH ★        │  ← Added to pop-installer
+│   5. CHILD SELECTION ★      │  ← Added to pop-installer
+│   6. User Creation          │
+│   7. Disk Selection         │
+│   8. Encryption             │
+│   9. Install Progress       │
+│   10. Success/Reboot        │
+└─────────────────────────────┘
+              ↓
+         [REBOOT]
+              ↓
+FIRST BOOT:
+┌─────────────────────────────┐
+│   guardian-installer (Rust) │
+│                             │
+│   1. Welcome                │
+│   2. WiFi                   │
+│   3. Appearance             │
+│   4. Layout                 │
+└─────────────────────────────┘
+```
 
 ## Building
 
@@ -53,44 +75,11 @@ just build
 just install
 ```
 
-## Integration with ISO Build
+## Files Created
 
-The installer is packaged as `guardian-installer` and included in the live ISO:
-
-```makefile
-# In iso-builder/config/guardian-os/24.04.mk
-LIVE_PKGS=\
-    casper \
-    guardian-installer \
-    guardian-installer-casper \
-    distinst \
-    ...
-```
-
-## Configuration Files Created
-
-After setup, Guardian Installer creates:
-
-```
-/etc/guardian/
-├── credentials      # Parent JWT token (encrypted)
-├── device.conf      # Device ID and registration info
-└── child.conf       # Active child profile ID
-
-/home/<child>/
-└── .config/guardian/
-    └── profile.json  # Child profile details
-```
-
-## Differences from cosmic-initial-setup
-
-| Feature | cosmic-initial-setup | Guardian Installer |
-|---------|---------------------|-------------------|
-| Purpose | Post-install wizard | Installation + setup |
-| Auth | None | Supabase/Guardian |
-| User creation | Standard admin | Limited child account |
-| Languages | 60+ | English UK only |
-| Pages | 12 | 10 (focused) |
+The wizard checks `/etc/guardian/device.conf` to determine if the device
+was registered during installation. If present, runs simple customization.
+If absent, runs full Guardian auth flow.
 
 ## License
 
@@ -99,5 +88,5 @@ GPL-3.0 - See [LICENSE](LICENSE)
 ## Related
 
 - [Guardian OS](https://github.com/guardian-network/guardian-os)
+- [pop-installer fork](../pop-installer/) - Live ISO installer with Guardian auth
 - [Guardian Daemon](../guardian-components/guardian-daemon/)
-- [Guardian Webapp](../guardian-components/guardian-webapp/)
