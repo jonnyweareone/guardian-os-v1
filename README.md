@@ -77,6 +77,155 @@ Get notified about risky searches or concerning behavior — without micromanagi
 
 ---
 
+## 🛡️ Guardian Daemon — The Heart of Protection
+
+The **Guardian Daemon** (`guardian-daemon`) is a Rust-based systemd service that runs continuously in the background, providing comprehensive protection for children online. It's designed to be lightweight, efficient, and impossible to bypass at the user level.
+
+### How It Protects Children
+
+#### 1. 📱 Device Registration & Activation
+When Guardian OS is first installed, the daemon:
+- Generates a unique **6-character activation code** (e.g., `A7X9K2`)
+- Registers the device with the Guardian cloud using hardware fingerprinting
+- Links the device to a parent's account when they enter the code in the mobile app
+- Obtains secure JWT tokens for ongoing cloud communication
+
+#### 2. ⏰ Screen Time Enforcement
+The daemon enforces healthy digital habits through:
+- **Daily time limits** — Automatically locks the session when time runs out
+- **Scheduled bedtimes** — Gradual warnings then session lock at bedtime
+- **Homework hours** — Restrict to educational apps during study time
+- **Break reminders** — Encourage kids to take breaks from screens
+- **Per-app limits** — Set specific limits for games vs. educational content
+
+#### 3. 🚫 Application Control
+Parents can control what apps children can use:
+- **Allowlist mode** — Only pre-approved apps can run
+- **Blocklist mode** — Block specific applications
+- **Age-based filtering** — Apps rated above child's age require approval
+- **Install protection** — New app installs require parent approval
+- **Process monitoring** — Detects and blocks restricted applications in real-time
+
+#### 4. 🌐 Web & Network Protection
+The daemon integrates with system DNS to provide:
+- **Category-based blocking** — Block adult content, gambling, social media, etc.
+- **Safe search enforcement** — Forces Google/Bing/YouTube safe search
+- **HTTPS inspection** — Detects bypasses via DNS-over-HTTPS
+- **Custom blocklists** — Parents can add specific domains to block
+- **Time-based rules** — Social media allowed only after homework
+
+#### 5. 📊 Activity Monitoring & Reporting
+The daemon tracks activity and syncs to the parent dashboard:
+- **Active window tracking** — Which apps are being used and for how long
+- **Website history** — Domains visited (not full URLs for privacy)
+- **Search queries** — Flagged if they contain concerning terms
+- **Session summaries** — Daily/weekly reports for parents
+- **Real-time alerts** — Instant notifications for policy violations
+
+#### 6. 🔒 Anti-Bypass Protection
+Guardian Daemon is designed to resist tampering:
+- Runs as **root-level systemd service** — cannot be stopped by child users
+- **Process watchdog** — automatically restarts if killed
+- **Configuration protection** — settings encrypted and require parent PIN
+- **Boot persistence** — starts automatically on every boot
+- **TTY lockdown** — prevents switching to virtual terminals to bypass
+
+#### 7. 🤖 AI-Powered Detection (Roadmap)
+Future versions will include on-device AI models:
+- **Screen Sentinel** — Captures screen frames, runs NudeNet/CLIP locally to detect inappropriate visual content, immediately discards frames after analysis
+- **Audio Guardian** — Uses Whisper.cpp to monitor microphone for signs of online grooming, bullying, or emotional distress
+- **Behavior Analysis** — ML models to detect unusual patterns (e.g., late-night usage, secretive behavior)
+
+### Technical Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Guardian Daemon                             │
+│                    (systemd service)                             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │   Scheduler  │  │   Monitor    │  │   Enforcer   │          │
+│  │              │  │              │  │              │          │
+│  │ • Time rules │  │ • X11/Wayland│  │ • Session    │          │
+│  │ • Bedtimes   │  │ • Process    │  │   locking    │          │
+│  │ • Breaks     │  │ • Network    │  │ • App block  │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│                                                                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │  AI Engine   │  │  Cloud Sync  │  │   Alerter    │          │
+│  │  (Future)    │  │              │  │              │          │
+│  │ • NudeNet    │  │ • Supabase   │  │ • Push notif │          │
+│  │ • Whisper    │  │ • JWT auth   │  │ • Email      │          │
+│  │ • CLIP       │  │ • Realtime   │  │ • Dashboard  │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    System Integration                            │
+├─────────────────────────────────────────────────────────────────┤
+│  • D-Bus (session control)    • NetworkManager (DNS filtering)  │
+│  • logind (session tracking)  • polkit (privilege escalation)   │
+│  • X11/Wayland (display)      • systemd (service management)    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Configuration
+
+The daemon reads configuration from `/etc/guardian/config.toml`:
+
+```toml
+[device]
+device_id = "auto-generated"
+activation_code = "A7X9K2"
+registered = true
+
+[cloud]
+api_url = "https://gkyspvcafyttfhyjryyk.supabase.co"
+sync_interval_secs = 30
+realtime_enabled = true
+
+[enforcement]
+screen_time_enabled = true
+app_blocking_enabled = true
+web_filtering_enabled = true
+lock_on_limit = true
+
+[monitoring]
+track_active_window = true
+track_websites = true
+track_searches = true
+send_alerts = true
+
+[ai]
+screen_sentinel_enabled = false  # Coming soon
+audio_guardian_enabled = false   # Coming soon
+local_inference_only = true      # Never send to cloud
+```
+
+### Daemon Commands
+
+```bash
+# Check daemon status
+sudo systemctl status guardian-daemon
+
+# View real-time logs
+sudo journalctl -u guardian-daemon -f
+
+# Restart daemon (requires root)
+sudo systemctl restart guardian-daemon
+
+# Show current session info
+guardian-cli status
+
+# Manually trigger cloud sync
+guardian-cli sync
+```
+
+---
+
 ## 🏗️ Architecture
 
 Guardian OS consists of several Rust components:
@@ -147,20 +296,33 @@ sudo ./build-iso.sh
 - **Local-first AI** — Sensitive analysis never leaves the device
 - **Encrypted sync** — All cloud communication over TLS
 - **LUKS encryption** — Full disk encryption available
+- **Tamper resistance** — Daemon protected from child user interference
 
 ---
 
 ## 🗺️ Roadmap
 
+### ✅ Completed (v1.0)
 - [x] Core daemon with screen time enforcement
-- [x] Device registration and activation flow
+- [x] Device registration and activation flow  
 - [x] Supabase backend integration
 - [x] COSMIC-based setup wizard
+- [x] Parent mobile app (PWA)
+- [x] Real-time cloud sync
+- [x] Application monitoring
+
+### 🚧 In Progress (v1.1)
+- [ ] Web filtering via DNS
+- [ ] Per-app time limits
+- [ ] Bedtime enforcement
+- [ ] Break reminders
+
+### 🔮 Future (v2.0)
 - [ ] Screen Sentinel (NudeNet + CLIP)
 - [ ] Audio Guardian (Whisper.cpp)
 - [ ] Network Shield (AI DNS filtering)
 - [ ] Guardian Agent (Claude-powered assistant)
-- [ ] Mobile parent app (iOS/Android)
+- [ ] Native mobile apps (iOS/Android)
 - [ ] Guardian Router integration
 
 ---
