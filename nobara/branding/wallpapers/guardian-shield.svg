@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Background gradient -->
+    <radialGradient id="bgGradient2" cx="50%" cy="30%" r="80%" fx="50%" fy="30%">
+      <stop offset="0%" style="stop-color:#0f1419;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#010409;stop-opacity:1" />
+    </radialGradient>
+    
+    <!-- Cyan gradient -->
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00E5FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00B8D4;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Glow -->
+    <filter id="bigGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="40" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1920" height="1080" fill="url(#bgGradient2)"/>
+  
+  <!-- Large glowing shield in center -->
+  <g transform="translate(660, 190)" filter="url(#bigGlow)">
+    <path d="M300 0 L564 72 L564 288 C564 456 432 576 300 624 C168 576 36 456 36 288 L36 72 Z" 
+          fill="url(#cyanGrad)" 
+          opacity="0.15"/>
+  </g>
+  
+  <!-- Shield outline -->
+  <g transform="translate(660, 190)">
+    <path d="M300 0 L564 72 L564 288 C564 456 432 576 300 624 C168 576 36 456 36 288 L36 72 Z" 
+          fill="none"
+          stroke="url(#cyanGrad)"
+          stroke-width="2"
+          opacity="0.3"/>
+    <!-- Inner shield -->
+    <path d="M300 40 L524 100 L524 280 C524 424 408 532 300 572 C192 532 76 424 76 280 L76 100 Z" 
+          fill="none"
+          stroke="rgba(0,229,255,0.15)"
+          stroke-width="1"/>
+  </g>
+  
+  <!-- Checkmark in shield -->
+  <g transform="translate(660, 190)">
+    <path d="M220 320 L280 380 L400 240" 
+          fill="none" 
+          stroke="url(#cyanGrad)" 
+          stroke-width="16" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"
+          opacity="0.4"/>
+  </g>
+  
+  <!-- Floating particles -->
+  <circle cx="300" cy="200" r="3" fill="#00E5FF" opacity="0.6"/>
+  <circle cx="1600" cy="300" r="2" fill="#00E5FF" opacity="0.4"/>
+  <circle cx="400" cy="800" r="4" fill="#00E5FF" opacity="0.3"/>
+  <circle cx="1500" cy="700" r="3" fill="#00E5FF" opacity="0.5"/>
+  <circle cx="200" cy="500" r="2" fill="#00E5FF" opacity="0.4"/>
+  <circle cx="1700" cy="500" r="3" fill="#00E5FF" opacity="0.3"/>
+  <circle cx="600" cy="900" r="2" fill="#00E5FF" opacity="0.5"/>
+  <circle cx="1300" cy="150" r="3" fill="#00E5FF" opacity="0.4"/>
+  
+  <!-- Horizontal scan lines (subtle) -->
+  <pattern id="scanlines" width="4" height="4" patternUnits="userSpaceOnUse">
+    <line x1="0" y1="0" x2="4" y2="0" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  </pattern>
+  <rect width="1920" height="1080" fill="url(#scanlines)" opacity="0.3"/>
+  
+  <!-- Bottom gradient fade -->
+  <linearGradient id="bottomFade" x1="0%" y1="0%" x2="0%" y2="100%">
+    <stop offset="80%" style="stop-color:transparent;stop-opacity:0" />
+    <stop offset="100%" style="stop-color:#00E5FF;stop-opacity:0.05" />
+  </linearGradient>
+  <rect width="1920" height="1080" fill="url(#bottomFade)"/>
+</svg>

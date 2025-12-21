@@ -91,8 +91,8 @@ success "Local repo created"
 NOBARA_ISO="${BUILD_DIR}/nobara-base.iso"
 if [ ! -f "${NOBARA_ISO}" ]; then
     log "Step 3: Downloading Nobara base ISO..."
-    # Use GNOME variant as base
-    NOBARA_URL="https://nobara-images.nobaraproject.org/Nobara-41-GNOME-2025-01-01.iso"
+    # Use GNOME variant as base - Nobara 42 is latest
+    NOBARA_URL="https://nobara-images.nobaraproject.org/Nobara-42-GNOME-2025-09-25.iso"
     wget --progress=bar:force -O "${NOBARA_ISO}" "${NOBARA_URL}" || {
         warn "Failed to download Nobara ISO. Using livemedia-creator instead."
         NOBARA_ISO=""

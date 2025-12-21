@@ -142,6 +142,31 @@ impl SupabaseClient {
         Ok(())
     }
 
+    /// Mark a remote command as completed
+    pub async fn complete_command(&self, command_id: &str, result: serde_json::Value) -> Result<()> {
+        let device_code = self.device_code.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Device code not set"))?;
+
+        self.client
+            .patch(&format!(
+                "{}/rest/v1/device_commands?id=eq.{}",
+                SUPABASE_URL, command_id
+            ))
+            .header("apikey", SUPABASE_ANON_KEY)
+            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "status": "completed",
+                "result": result,
+                "completed_at": Utc::now().to_rfc3339()
+            }))
+            .send()
+            .await?;
+
+        debug!("Command {} completed", command_id);
+        Ok(())
+    }
+
     /// Get approved/blocked contacts for local cache
     pub async fn get_contacts(&self, family_id: &str) -> Result<Vec<ContactInfo>> {
         let resp = self.client

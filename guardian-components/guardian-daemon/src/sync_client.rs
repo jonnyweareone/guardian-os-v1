@@ -16,7 +16,7 @@ use crate::supabase::{
     AlertSync, ContactSync, ChildInteraction,
     DeviceRegistration, HardwareInfo, DeviceStatusResponse,
 };
-use crate::config::Config;
+use crate::config::GuardianConfig;
 
 const GUARDIAN_VERSION: &str = "1.1.0";
 

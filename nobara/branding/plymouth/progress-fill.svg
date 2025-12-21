@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="296" height="4" viewBox="0 0 296 4" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="progressGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00B8D4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00E5FF;stop-opacity:1" />
+    </linearGradient>
+    <filter id="progressGlow" x="-10%" y="-100%" width="120%" height="300%">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Progress bar fill -->
+  <rect x="0" y="0" width="296" height="4" rx="2" ry="2" fill="url(#progressGrad)" filter="url(#progressGlow)"/>
+</svg>

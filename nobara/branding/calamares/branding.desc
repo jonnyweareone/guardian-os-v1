@@ -1,0 +1,32 @@
+---
+componentName: guardian
+
+strings:
+    productName:         "Guardian OS"
+    shortProductName:    "Guardian"
+    version:             "1.1.0"
+    shortVersion:        "1.1"
+    versionedName:       "Guardian OS 1.1.0"
+    shortVersionedName:  "Guardian 1.1"
+    bootloaderEntryName: "Guardian OS"
+    productUrl:          "https://gameguardian.ai"
+    supportUrl:          "https://gameguardian.ai/support"
+    knownIssuesUrl:      "https://github.com/jonnyweareone/guardian-os-v1/issues"
+    releaseNotesUrl:     "https://gameguardian.ai/changelog"
+    donateUrl:           ""
+
+images:
+    productBanner:       "guardian-logo.svg"
+    productIcon:         "guardian-icon.svg"
+    productLogo:         "guardian-logo.svg"
+    productWallpaper:    "guardian-wallpaper.svg"
+    productWelcome:      "guardian-welcome.svg"
+
+slideshow:               "show.qml"
+slideshowAPI:            2
+
+style:
+    sidebarBackground:   "#1a1a2e"
+    sidebarText:         "#ffffff"
+    sidebarTextSelect:   "#6366f1"
+    sidebarTextHighlight:"#a5b4fc"
