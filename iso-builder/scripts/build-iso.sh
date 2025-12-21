@@ -16,8 +16,7 @@ PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 # Configuration
 POP_VERSION="24.04"
 POP_ISO_URL="https://iso.pop-os.org/24.04/amd64/intel/20/pop-os_24.04_amd64_intel_20.iso"
-GUARDIAN_VERSION="1.0.0"
-GITHUB_RELEASE_URL="https://github.com/jonnyweareone/guardian-os-v1/releases/download/v${GUARDIAN_VERSION}"
+GUARDIAN_VERSION="1.0.1"
 
 # Directories
 WORK_DIR="/opt/guardian-iso-build"
@@ -49,7 +48,7 @@ print_banner() {
 ║  ██║   ██║██║   ██║██╔══██║██╔══██╗██║  ██║██║██╔══██║██║╚██╗██║  ║
 ║  ╚██████╔╝╚██████╔╝██║  ██║██║  ██║██████╔╝██║██║  ██║██║ ╚████║  ║
 ║   ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝  ║
-║                         OS  v1.0.0                                ║
+║                         OS  v1.0.1                                ║
 ║                                                                   ║
 ║            AI Powered Protection For Families                     ║
 ║            Built on Pop!_OS 24.04 LTS + COSMIC                    ║
@@ -192,31 +191,6 @@ EOF
     dpkg-deb --build "$deb_dir" "${pkg_dir}/guardian-installer_${GUARDIAN_VERSION}_amd64.deb"
     
     success "guardian-installer package built"
-}
-
-download_guardian_packages() {
-    log "Downloading Guardian component packages..."
-    
-    local pkg_dir="${WORK_DIR}/packages"
-    mkdir -p "$pkg_dir"
-    
-    local packages=(guardian-daemon guardian-wizard)
-    
-    for pkg in "${packages[@]}"; do
-        local deb="${pkg}_${GUARDIAN_VERSION}_amd64.deb"
-        if [ ! -f "${pkg_dir}/${deb}" ]; then
-            log "  Downloading ${pkg}..."
-            wget -q "${GITHUB_RELEASE_URL}/${deb}" -O "${pkg_dir}/${deb}" || {
-                warn "Could not download ${pkg} from release"
-            }
-        else
-            success "  ${pkg} already downloaded"
-        fi
-    done
-    
-    # List what we got
-    log "Available packages:"
-    ls -la "${pkg_dir}/"*.deb 2>/dev/null || warn "No .deb packages found"
 }
 
 extract_iso() {
@@ -442,9 +416,8 @@ main() {
     trap cleanup EXIT
     
     check_deps
-    build_guardian_installer
-    download_guardian_packages
     download_pop_iso
+    build_guardian_installer
     extract_iso
     inject_guardian
     apply_branding
