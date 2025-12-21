@@ -16,7 +16,7 @@ PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 # Configuration
 POP_VERSION="24.04"
 POP_ISO_URL="https://iso.pop-os.org/24.04/amd64/intel/20/pop-os_24.04_amd64_intel_20.iso"
-GUARDIAN_VERSION="1.0.1"
+GUARDIAN_VERSION="1.0.2"
 
 # Directories
 WORK_DIR="/opt/guardian-iso-build"
@@ -48,7 +48,7 @@ print_banner() {
 ║  ██║   ██║██║   ██║██╔══██║██╔══██╗██║  ██║██║██╔══██║██║╚██╗██║  ║
 ║  ╚██████╔╝╚██████╔╝██║  ██║██║  ██║██████╔╝██║██║  ██║██║ ╚████║  ║
 ║   ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝  ║
-║                         OS  v1.0.1                                ║
+║                         OS  v1.0.2                                ║
 ║                                                                   ║
 ║            AI Powered Protection For Families                     ║
 ║            Built on Pop!_OS 24.04 LTS + COSMIC                    ║
@@ -155,13 +155,15 @@ build_guardian_installer() {
     mkdir -p "$deb_dir/usr/bin"
     mkdir -p "$deb_dir/usr/share/applications"
     mkdir -p "$deb_dir/usr/share/cosmic-initial-setup"
+    mkdir -p "$deb_dir/etc/xdg/autostart"
     
-    # Copy binary
-    cp "target/release/cosmic-initial-setup" "$deb_dir/usr/bin/guardian-installer"
-    chmod 755 "$deb_dir/usr/bin/guardian-installer"
+    # Copy binary DIRECTLY as cosmic-initial-setup (not as guardian-installer)
+    # This ensures it replaces the original binary completely
+    cp "target/release/cosmic-initial-setup" "$deb_dir/usr/bin/cosmic-initial-setup"
+    chmod 755 "$deb_dir/usr/bin/cosmic-initial-setup"
     
-    # Create symlink for compatibility (cosmic-initial-setup expects this name)
-    ln -sf guardian-installer "$deb_dir/usr/bin/cosmic-initial-setup"
+    # Also provide guardian-installer as an alias
+    ln -sf cosmic-initial-setup "$deb_dir/usr/bin/guardian-installer"
     
     # Copy resources
     cp -r res/* "$deb_dir/usr/share/cosmic-initial-setup/" 2>/dev/null || true
@@ -169,6 +171,9 @@ build_guardian_installer() {
     
     # Copy desktop files
     cp res/*.desktop "$deb_dir/usr/share/applications/" 2>/dev/null || true
+    
+    # Copy autostart file (critical for first-boot launch)
+    cp res/com.system76.CosmicInitialSetup.Autostart.desktop "$deb_dir/etc/xdg/autostart/" 2>/dev/null || true
     
     # Create control file
     cat > "$deb_dir/DEBIAN/control" << EOF
@@ -249,8 +254,14 @@ inject_guardian() {
 #!/bin/bash
 set -e
 
+# IMPORTANT: First remove the original cosmic-initial-setup
+# This is required so our guardian-installer can replace it
+echo "Removing original cosmic-initial-setup..."
+apt-get remove -y cosmic-initial-setup 2>/dev/null || dpkg -r cosmic-initial-setup 2>/dev/null || true
+
 # Install any .deb packages
 if ls /tmp/guardian-packages/*.deb 1>/dev/null 2>&1; then
+    echo "Installing Guardian packages..."
     dpkg -i /tmp/guardian-packages/*.deb || apt-get install -f -y
 fi
 
