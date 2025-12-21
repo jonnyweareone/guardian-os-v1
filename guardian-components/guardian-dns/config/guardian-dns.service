@@ -1,0 +1,27 @@
+[Unit]
+Description=Guardian DNS Filter
+Documentation=https://github.com/guardian-network/guardian-os
+After=network.target
+Before=guardian-daemon.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/guardian/guardian-dns
+Restart=always
+RestartSec=5
+
+# Security hardening
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/guardian/dns
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=guardian-dns
+
+[Install]
+WantedBy=multi-user.target
