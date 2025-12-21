@@ -182,9 +182,95 @@ impl SupabaseClient {
         let contacts: Vec<ContactInfo> = resp.json().await?;
         Ok(contacts)
     }
+
+    /// Send device heartbeat with system status
+    pub async fn send_heartbeat(&self, heartbeat: &DeviceHeartbeat) -> Result<()> {
+        self.client
+            .patch(&format!(
+                "{}/rest/v1/devices?id=eq.{}",
+                SUPABASE_URL, heartbeat.device_id
+            ))
+            .header("apikey", SUPABASE_ANON_KEY)
+            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "last_seen": Utc::now().to_rfc3339(),
+                "ip_address": heartbeat.ip_address,
+                "cpu_percent": heartbeat.cpu_percent,
+                "memory_percent": heartbeat.memory_percent,
+                "disk_percent": heartbeat.disk_percent,
+                "active_app": heartbeat.active_app,
+                "screen_locked": heartbeat.screen_locked
+            }))
+            .send()
+            .await?;
+
+        debug!("Heartbeat sent for device {}", heartbeat.device_id);
+        Ok(())
+    }
+
+    /// Get pending commands for this device
+    pub async fn get_pending_commands(&self, device_id: &str) -> Result<Vec<PendingCommand>> {
+        let resp = self.client
+            .get(&format!(
+                "{}/rest/v1/device_commands?device_id=eq.{}&status=eq.pending&select=id,command,payload,created_at",
+                SUPABASE_URL, device_id
+            ))
+            .header("apikey", SUPABASE_ANON_KEY)
+            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            return Ok(vec![]);
+        }
+
+        let commands: Vec<PendingCommand> = resp.json().await.unwrap_or_default();
+        Ok(commands)
+    }
+
+    /// Acknowledge receipt of a command
+    pub async fn acknowledge_command(&self, command_id: &str) -> Result<()> {
+        self.client
+            .patch(&format!(
+                "{}/rest/v1/device_commands?id=eq.{}",
+                SUPABASE_URL, command_id
+            ))
+            .header("apikey", SUPABASE_ANON_KEY)
+            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "status": "acknowledged",
+                "acknowledged_at": Utc::now().to_rfc3339()
+            }))
+            .send()
+            .await?;
+
+        debug!("Command {} acknowledged", command_id);
+        Ok(())
+    }
 }
 
 // ============ Request/Response Types ============
+
+#[derive(Debug, Serialize)]
+pub struct DeviceHeartbeat {
+    pub device_id: String,
+    pub ip_address: Option<String>,
+    pub cpu_percent: Option<f32>,
+    pub memory_percent: Option<f32>,
+    pub disk_percent: Option<f32>,
+    pub active_app: Option<String>,
+    pub screen_locked: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PendingCommand {
+    pub id: String,
+    pub command: String,
+    pub payload: Option<serde_json::Value>,
+    pub created_at: String,
+}
 
 #[derive(Debug, Serialize)]
 pub struct DeviceRegistration {
