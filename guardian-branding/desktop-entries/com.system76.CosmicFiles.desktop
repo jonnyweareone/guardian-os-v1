@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Guardian Files
+GenericName=File Manager
+Comment=Browse and manage files and folders
+Exec=cosmic-files %U
+Icon=com.system76.CosmicFiles
+Terminal=false
+Type=Application
+Categories=System;FileTools;FileManager;Utility;Core;GTK;
+MimeType=inode/directory;
+Keywords=file;folder;browse;manager;explore;disk;filesystem;
+StartupNotify=true
+X-GNOME-UsesNotifications=true

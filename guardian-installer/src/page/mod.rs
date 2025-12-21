@@ -14,6 +14,7 @@ pub mod keyboard;
 pub mod language;
 pub mod layout;
 pub mod user;
+pub mod wallpaper;
 pub mod welcome;
 pub mod wifi;
 
@@ -35,7 +36,7 @@ pub fn pages(mode: AppMode) -> IndexMap<TypeId, Box<dyn Page>> {
         // ============================================
         // NORMAL POST-INSTALL (Device already registered)
         // ============================================
-        // Flow: Welcome → WiFi → Protection Setup → Appearance → Layout
+        // Flow: Welcome → WiFi → Protection → Wallpaper → Appearance → Layout
         AppMode::PostInstall => {
             // 1. Welcome to Guardian OS
             pages.insert(
@@ -43,7 +44,7 @@ pub fn pages(mode: AppMode) -> IndexMap<TypeId, Box<dyn Page>> {
                 Box::new(welcome::Page::new()),
             );
 
-            // 2. WiFi (connect for policy sync)
+            // 2. WiFi (connect for policy sync and wallpaper fetch)
             pages.insert(
                 TypeId::of::<wifi::Page>(),
                 Box::new(wifi::Page::default()),
@@ -56,13 +57,20 @@ pub fn pages(mode: AppMode) -> IndexMap<TypeId, Box<dyn Page>> {
                 Box::new(guardian_protection::Page::new()),
             );
 
-            // 4. Appearance - theme, accent colours
+            // 4. Personalized Wallpaper Selection
+            // Child picks wallpaper based on age/gender/interests
+            pages.insert(
+                TypeId::of::<wallpaper::Page>(),
+                Box::new(wallpaper::Page::new()),
+            );
+
+            // 5. Appearance - theme, accent colours
             pages.insert(
                 TypeId::of::<appearance::Page>(),
                 Box::new(appearance::Page::new()),
             );
 
-            // 5. Layout - panel position, dock
+            // 6. Layout - panel position, dock
             pages.insert(
                 TypeId::of::<layout::Page>(),
                 Box::new(layout::Page::default()),
@@ -72,7 +80,7 @@ pub fn pages(mode: AppMode) -> IndexMap<TypeId, Box<dyn Page>> {
         // ============================================
         // UNREGISTERED DEVICE (Fallback)
         // ============================================
-        // Flow: Welcome → WiFi → Auth → Child → Protection → Appearance → Layout
+        // Flow: Welcome → WiFi → Auth → Child → Protection → Wallpaper → Appearance → Layout
         AppMode::UnregisteredDevice => {
             pages.insert(
                 TypeId::of::<welcome::Page>(),
@@ -106,6 +114,12 @@ pub fn pages(mode: AppMode) -> IndexMap<TypeId, Box<dyn Page>> {
                 Box::new(guardian_protection::Page::new()),
             );
 
+            // Wallpaper selection
+            pages.insert(
+                TypeId::of::<wallpaper::Page>(),
+                Box::new(wallpaper::Page::new()),
+            );
+
             // Appearance customization
             pages.insert(
                 TypeId::of::<appearance::Page>(),
@@ -134,6 +148,7 @@ pub enum Message {
     Layout(layout::Message),
     SetTheme(cosmic::Theme),
     User(user::Message),
+    Wallpaper(wallpaper::Message),
     Welcome(welcome::Message),
     WiFi(wifi::Message),
 }

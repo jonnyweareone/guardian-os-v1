@@ -322,6 +322,18 @@ impl Application for App {
                                 .map(cosmic::Action::App);
                         }
                     }
+
+                    page::Message::Wallpaper(message) => {
+                        if let Some(page) = self.pages.get_mut(&TypeId::of::<page::wallpaper::Page>()) {
+                            return page
+                                .as_any()
+                                .downcast_mut::<page::wallpaper::Page>()
+                                .unwrap()
+                                .update(message)
+                                .map(Message::PageMessage)
+                                .map(cosmic::Action::App);
+                        }
+                    }
                 }
             }
 

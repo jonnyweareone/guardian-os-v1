@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Guardian Terminal
+GenericName=Terminal Emulator
+Comment=Use the command line
+Exec=cosmic-term
+Icon=com.system76.CosmicTerm
+Terminal=false
+Type=Application
+Categories=System;TerminalEmulator;
+Keywords=terminal;console;command;prompt;shell;bash;
+StartupNotify=true

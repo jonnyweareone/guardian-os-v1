@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Guardian Calculator
+GenericName=Calculator
+Comment=Perform mathematical calculations
+Exec=cosmic-calculator
+Icon=com.system76.CosmicCalculator
+Terminal=false
+Type=Application
+Categories=Utility;Calculator;
+Keywords=calculator;math;arithmetic;
+StartupNotify=true
