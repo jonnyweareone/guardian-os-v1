@@ -1,0 +1,8 @@
+# Guardian Child Selection Module for Calamares
+# This module allows parents to select which child will use this device
+
+type: "viewmodule"
+name: "guardianchild"
+interface: "qtplugin"
+requires: ["guardianauth"]
+weight: 2

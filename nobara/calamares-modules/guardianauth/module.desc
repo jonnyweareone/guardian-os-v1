@@ -1,0 +1,8 @@
+# Guardian Authentication Module for Calamares
+# This module handles parent authentication before OS installation
+
+type: "viewmodule"
+name: "guardianauth"
+interface: "qtplugin"
+requires: []
+weight: 2
