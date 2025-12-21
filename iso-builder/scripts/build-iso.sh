@@ -111,6 +111,89 @@ download_pop_iso() {
     success "Pop!_OS ISO downloaded ($(du -h "$iso_file" | cut -f1))"
 }
 
+build_guardian_installer() {
+    log "Building guardian-installer (custom initial setup)..."
+    
+    local installer_dir="${PROJECT_ROOT}/guardian-installer"
+    local pkg_dir="${WORK_DIR}/packages"
+    mkdir -p "$pkg_dir"
+    
+    if [ ! -d "$installer_dir" ]; then
+        error "guardian-installer directory not found at $installer_dir"
+    fi
+    
+    # Install Rust if needed
+    if ! command -v cargo &>/dev/null; then
+        log "Installing Rust..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        source "$HOME/.cargo/env"
+    fi
+    
+    # Install build dependencies
+    log "Installing build dependencies..."
+    apt-get update -qq
+    apt-get install -y -qq build-essential pkg-config libssl-dev libdbus-1-dev \
+        libxkbcommon-dev libwayland-dev libinput-dev libudev-dev libgbm-dev \
+        libseat-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev \
+        libxcb-xfixes0-dev libexpat1-dev libfontconfig-dev libfreetype-dev clang
+    
+    cd "$installer_dir"
+    
+    # Build release binary
+    log "Compiling guardian-installer..."
+    source "$HOME/.cargo/env" 2>/dev/null || true
+    cargo build --release
+    
+    if [ ! -f "target/release/cosmic-initial-setup" ]; then
+        error "Build failed - binary not found"
+    fi
+    
+    # Create .deb package
+    log "Creating .deb package..."
+    local deb_dir="${WORK_DIR}/guardian-installer-deb"
+    rm -rf "$deb_dir"
+    mkdir -p "$deb_dir/DEBIAN"
+    mkdir -p "$deb_dir/usr/bin"
+    mkdir -p "$deb_dir/usr/share/applications"
+    mkdir -p "$deb_dir/usr/share/cosmic-initial-setup"
+    
+    # Copy binary
+    cp "target/release/cosmic-initial-setup" "$deb_dir/usr/bin/guardian-installer"
+    chmod 755 "$deb_dir/usr/bin/guardian-installer"
+    
+    # Create symlink for compatibility (cosmic-initial-setup expects this name)
+    ln -sf guardian-installer "$deb_dir/usr/bin/cosmic-initial-setup"
+    
+    # Copy resources
+    cp -r res/* "$deb_dir/usr/share/cosmic-initial-setup/" 2>/dev/null || true
+    cp -r i18n "$deb_dir/usr/share/cosmic-initial-setup/" 2>/dev/null || true
+    
+    # Copy desktop files
+    cp res/*.desktop "$deb_dir/usr/share/applications/" 2>/dev/null || true
+    
+    # Create control file
+    cat > "$deb_dir/DEBIAN/control" << EOF
+Package: guardian-installer
+Version: ${GUARDIAN_VERSION}
+Section: admin
+Priority: optional
+Architecture: amd64
+Depends: libxkbcommon0, libwayland-client0, libdbus-1-3
+Provides: cosmic-initial-setup
+Conflicts: cosmic-initial-setup
+Replaces: cosmic-initial-setup
+Maintainer: Guardian OS Team <support@gameguardian.ai>
+Description: Guardian OS Initial Setup
+ Custom initial setup wizard for Guardian OS with
+ parent authentication, child selection, and sync enrollment.
+EOF
+    
+    # Build the deb
+    dpkg-deb --build "$deb_dir" "${pkg_dir}/guardian-installer_${GUARDIAN_VERSION}_amd64.deb"
+    
+    success "guardian-installer package built"
+}
+
 download_guardian_packages() {
     log "Downloading Guardian component packages..."
     
@@ -359,8 +442,9 @@ main() {
     trap cleanup EXIT
     
     check_deps
-    download_pop_iso
+    build_guardian_installer
     download_guardian_packages
+    download_pop_iso
     extract_iso
     inject_guardian
     apply_branding
