@@ -124,6 +124,29 @@ age-group-7-12 = 7-12
 age-group-13-17 = 13-17
 
 ## ============================================
+## GUARDIAN OS - Protection Setup (First Boot)
+## ============================================
+
+guardian-protection-page = Guardian Protection
+    .title = Setting Up Protection
+    .checking = Checking protection status...
+    .configuring = Configuring safe browsing...
+    .complete = Protection is active
+    .error = Setup failed
+    .daemon-status = Guardian service running
+    .dns-status = Safe DNS configured
+    .filtering-level = Content Filtering Level
+    .dns-error = Could not configure DNS. Please check network connection.
+    .daemon-error = Could not start Guardian service. Please restart and try again.
+
+filtering-strict = Strict
+filtering-strict-desc = Blocks adult content, social media, gaming sites, and videos. Best for younger children.
+filtering-moderate = Moderate
+filtering-moderate-desc = Blocks adult content and dangerous sites. Allows social media with monitoring.
+filtering-permissive = Permissive
+filtering-permissive-desc = Minimal blocking. Monitors activity and sends reports. Best for teenagers.
+
+## ============================================
 ## GUARDIAN OS - Device Setup
 ## ============================================
 

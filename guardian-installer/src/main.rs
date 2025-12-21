@@ -310,6 +310,18 @@ impl Application for App {
                                 .map(cosmic::Action::App);
                         }
                     }
+
+                    page::Message::GuardianProtection(message) => {
+                        if let Some(page) = self.pages.get_mut(&TypeId::of::<page::guardian_protection::Page>()) {
+                            return page
+                                .as_any()
+                                .downcast_mut::<page::guardian_protection::Page>()
+                                .unwrap()
+                                .update(message)
+                                .map(Message::PageMessage)
+                                .map(cosmic::Action::App);
+                        }
+                    }
                 }
             }
 

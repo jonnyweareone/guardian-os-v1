@@ -1,32 +1,28 @@
 // Guardian OS Post-Install Wizard
 // Runs on FIRST BOOT after installation
-// Simple customization - device already registered during install
 
 use cosmic::{Element, widget};
 use indexmap::IndexMap;
 use std::any::{Any, TypeId};
 
 pub mod appearance;
+pub mod guardian_auth;
+pub mod guardian_child;
+pub mod guardian_protection;
+pub mod guardian_sync;
 pub mod keyboard;
 pub mod language;
 pub mod layout;
+pub mod user;
 pub mod welcome;
 pub mod wifi;
-
-// Guardian auth pages - ONLY used if device wasn't registered during install
-pub mod guardian_auth;
-pub mod guardian_child;
-pub mod guardian_sync;
-pub mod user;
 
 /// Application modes
 pub enum AppMode {
     /// Normal first-boot wizard (device already registered during install)
-    /// Simple customization only
     PostInstall,
     
     /// Fallback mode if device wasn't registered during installation
-    /// Full Guardian auth flow
     UnregisteredDevice,
 }
 
@@ -39,7 +35,7 @@ pub fn pages(mode: AppMode) -> IndexMap<TypeId, Box<dyn Page>> {
         // ============================================
         // NORMAL POST-INSTALL (Device already registered)
         // ============================================
-        // Simple customization wizard
+        // Flow: Welcome → WiFi → Protection Setup → Appearance → Layout
         AppMode::PostInstall => {
             // 1. Welcome to Guardian OS
             pages.insert(
@@ -47,19 +43,26 @@ pub fn pages(mode: AppMode) -> IndexMap<TypeId, Box<dyn Page>> {
                 Box::new(welcome::Page::new()),
             );
 
-            // 2. WiFi (connect for updates)
+            // 2. WiFi (connect for policy sync)
             pages.insert(
                 TypeId::of::<wifi::Page>(),
                 Box::new(wifi::Page::default()),
             );
 
-            // 3. Appearance - theme, accent colours
+            // 3. Guardian Protection Setup
+            // Shows daemon status, DNS config, filtering level
+            pages.insert(
+                TypeId::of::<guardian_protection::Page>(),
+                Box::new(guardian_protection::Page::new()),
+            );
+
+            // 4. Appearance - theme, accent colours
             pages.insert(
                 TypeId::of::<appearance::Page>(),
                 Box::new(appearance::Page::new()),
             );
 
-            // 4. Layout - panel position, dock
+            // 5. Layout - panel position, dock
             pages.insert(
                 TypeId::of::<layout::Page>(),
                 Box::new(layout::Page::default()),
@@ -67,10 +70,9 @@ pub fn pages(mode: AppMode) -> IndexMap<TypeId, Box<dyn Page>> {
         }
         
         // ============================================
-        // UNREGISTERED DEVICE (Fallback - shouldn't normally happen)
+        // UNREGISTERED DEVICE (Fallback)
         // ============================================
-        // Full Guardian registration flow
-        // This runs if installation happened without Guardian auth
+        // Flow: Welcome → WiFi → Auth → Child → Protection → Appearance → Layout
         AppMode::UnregisteredDevice => {
             pages.insert(
                 TypeId::of::<welcome::Page>(),
@@ -98,6 +100,12 @@ pub fn pages(mode: AppMode) -> IndexMap<TypeId, Box<dyn Page>> {
                 Box::new(guardian_sync::Page::new()),
             );
 
+            // Protection setup (after auth)
+            pages.insert(
+                TypeId::of::<guardian_protection::Page>(),
+                Box::new(guardian_protection::Page::new()),
+            );
+
             // Appearance customization
             pages.insert(
                 TypeId::of::<appearance::Page>(),
@@ -119,6 +127,7 @@ pub enum Message {
     Appearance(appearance::Message),
     GuardianAuth(guardian_auth::Message),
     GuardianChild(guardian_child::Message),
+    GuardianProtection(guardian_protection::Message),
     GuardianSync(guardian_sync::Message),
     Keyboard(keyboard::Message),
     Language(language::Message),
