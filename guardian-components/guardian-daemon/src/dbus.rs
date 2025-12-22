@@ -103,21 +103,13 @@ impl GuardianDbusService {
     
     /// Trigger a rule sync from the server
     async fn sync_rules(&self) -> fdo::Result<bool> {
-        if let Some(ref client) = self.state.sync_client {
-            if let Some(ref child_id) = self.state.config.child_id {
-                match client.fetch_rules(child_id).await {
-                    Ok(new_rules) => {
-                        let mut rules = self.state.rules.write().await;
-                        *rules = new_rules;
-                        return Ok(true);
-                    }
-                    Err(e) => {
-                        error!("Failed to sync rules: {}", e);
-                    }
-                }
-            }
+        // In v2, rules are synced via REST API to Supabase
+        // The sync_client is optional and only for file sync
+        if let Err(e) = self.state.sync_policies().await {
+            error!("Failed to sync rules: {}", e);
+            return Ok(false);
         }
-        Ok(false)
+        Ok(true)
     }
 }
 

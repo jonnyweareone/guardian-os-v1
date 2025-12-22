@@ -1,7 +1,6 @@
-//! Supabase client for Guardian OS v1.1.0
+//! Supabase client for Guardian Daemon
 //! 
-//! Handles device registration, activation, and data sync with Supabase backend
-//! Uses Edge Functions for device lifecycle management
+//! Handles device registration, activation, heartbeat, and policy sync
 
 use anyhow::{Result, Context};
 use reqwest::Client;
@@ -15,36 +14,36 @@ const SUPABASE_ANON_KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOi
 /// Supabase client for Guardian OS
 pub struct SupabaseClient {
     client: Client,
-    device_code: Option<String>,
+    anon_key: String,
 }
 
 impl SupabaseClient {
-    pub fn new() -> Self {
+    pub fn new(anon_key: &str) -> Self {
         Self {
             client: Client::new(),
-            device_code: None,
+            anon_key: if anon_key.is_empty() { 
+                SUPABASE_ANON_KEY.to_string() 
+            } else { 
+                anon_key.to_string() 
+            },
         }
     }
 
-    pub fn with_device_code(device_code: &str) -> Self {
-        Self {
-            client: Client::new(),
-            device_code: Some(device_code.to_string()),
-        }
+    fn headers(&self) -> Vec<(&str, String)> {
+        vec![
+            ("apikey", self.anon_key.clone()),
+            ("Authorization", format!("Bearer {}", self.anon_key)),
+            ("Content-Type", "application/json".to_string()),
+        ]
     }
 
-    pub fn set_device_code(&mut self, code: &str) {
-        self.device_code = Some(code.to_string());
-    }
-
-    // ============ Edge Function Calls ============
+    // ============ Device Registration ============
 
     /// Register a new device via Edge Function
-    /// Returns device code for activation
     pub async fn register_device(&self, registration: &DeviceRegistration) -> Result<DeviceRegistrationResponse> {
         let resp = self.client
             .post(&format!("{}/functions/v1/device-register", SUPABASE_URL))
-            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+            .header("Authorization", format!("Bearer {}", self.anon_key))
             .header("Content-Type", "application/json")
             .json(registration)
             .send()
@@ -63,14 +62,14 @@ impl SupabaseClient {
         Ok(response)
     }
 
-    /// Check device activation status via Edge Function
+    /// Check device activation status
     pub async fn check_activation(&self, device_code: &str) -> Result<DeviceStatusResponse> {
         let resp = self.client
             .get(&format!(
                 "{}/functions/v1/device-status?device_code={}",
                 SUPABASE_URL, device_code
             ))
-            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+            .header("Authorization", format!("Bearer {}", self.anon_key))
             .send()
             .await
             .context("Failed to check activation status")?;
@@ -80,80 +79,98 @@ impl SupabaseClient {
             anyhow::bail!("Activation check failed: {}", error_text);
         }
 
-        let response: DeviceStatusResponse = resp.json().await
-            .context("Failed to parse status response")?;
-        
-        Ok(response)
+        resp.json().await.context("Failed to parse status response")
     }
 
-    /// Sync data to cloud via Edge Function
-    pub async fn sync_data(&self, payload: &SyncPayload) -> Result<SyncResponse> {
-        let device_code = self.device_code.as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Device code not set"))?;
+    // ============ Heartbeat & Status ============
+
+    /// Send device heartbeat with system status
+    pub async fn send_heartbeat(&self, heartbeat: &DeviceHeartbeat) -> Result<()> {
+        let payload = serde_json::json!({
+            "last_seen": Utc::now().to_rfc3339(),
+            "ip_address": heartbeat.ip_address,
+            "cpu_percent": heartbeat.cpu_percent,
+            "memory_percent": heartbeat.memory_percent,
+            "disk_percent": heartbeat.disk_percent,
+            "active_app": heartbeat.active_app,
+            "screen_locked": heartbeat.screen_locked
+        });
 
         let resp = self.client
-            .post(&format!("{}/functions/v1/device-sync", SUPABASE_URL))
-            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
-            .header("x-device-id", device_code)
-            .header("Content-Type", "application/json")
-            .json(payload)
-            .send()
-            .await
-            .context("Failed to sync data")?;
-
-        if resp.status().as_u16() == 403 {
-            warn!("Device not activated, sync rejected");
-            anyhow::bail!("Device not activated");
-        }
-
-        if !resp.status().is_success() {
-            let error_text = resp.text().await.unwrap_or_default();
-            anyhow::bail!("Sync failed: {}", error_text);
-        }
-
-        let response: SyncResponse = resp.json().await
-            .context("Failed to parse sync response")?;
-        
-        debug!("Sync complete: {:?}", response.results);
-        Ok(response)
-    }
-
-    // ============ Direct REST API Calls (for simple operations) ============
-
-    /// Update device last_seen (heartbeat)
-    pub async fn heartbeat(&self) -> Result<()> {
-        let device_code = self.device_code.as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Device code not set"))?;
-
-        self.client
             .patch(&format!(
-                "{}/rest/v1/devices?device_code=eq.{}",
-                SUPABASE_URL, device_code
+                "{}/rest/v1/devices?id=eq.{}",
+                SUPABASE_URL, heartbeat.device_id
             ))
-            .header("apikey", SUPABASE_ANON_KEY)
-            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+            .header("apikey", &self.anon_key)
+            .header("Authorization", format!("Bearer {}", self.anon_key))
             .header("Content-Type", "application/json")
-            .json(&serde_json::json!({
-                "last_seen": Utc::now().to_rfc3339()
-            }))
+            .header("Prefer", "return=minimal")
+            .json(&payload)
             .send()
             .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            warn!("Heartbeat failed: {} - {}", status, text);
+        } else {
+            debug!("Heartbeat sent for device {}", heartbeat.device_id);
+        }
 
         Ok(())
     }
 
-    /// Mark a remote command as completed
-    pub async fn complete_command(&self, command_id: &str, result: serde_json::Value) -> Result<()> {
-        let device_code = self.device_code.as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Device code not set"))?;
+    // ============ Commands ============
 
+    /// Get pending commands for this device
+    pub async fn get_pending_commands(&self, device_id: &str) -> Result<Vec<PendingCommand>> {
+        let resp = self.client
+            .get(&format!(
+                "{}/rest/v1/device_commands?device_id=eq.{}&status=eq.pending&select=id,command,payload,created_at&order=created_at.asc",
+                SUPABASE_URL, device_id
+            ))
+            .header("apikey", &self.anon_key)
+            .header("Authorization", format!("Bearer {}", self.anon_key))
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            return Ok(vec![]);
+        }
+
+        resp.json().await.unwrap_or_else(|_| vec![]).pipe(Ok)
+    }
+
+    /// Acknowledge receipt of a command
+    pub async fn acknowledge_command(&self, command_id: &str) -> Result<()> {
         self.client
             .patch(&format!(
                 "{}/rest/v1/device_commands?id=eq.{}",
                 SUPABASE_URL, command_id
             ))
-            .header("apikey", SUPABASE_ANON_KEY)
-            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+            .header("apikey", &self.anon_key)
+            .header("Authorization", format!("Bearer {}", self.anon_key))
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "status": "acknowledged",
+                "acknowledged_at": Utc::now().to_rfc3339()
+            }))
+            .send()
+            .await?;
+
+        debug!("Command {} acknowledged", command_id);
+        Ok(())
+    }
+
+    /// Mark command as completed
+    pub async fn complete_command(&self, command_id: &str, result: serde_json::Value) -> Result<()> {
+        self.client
+            .patch(&format!(
+                "{}/rest/v1/device_commands?id=eq.{}",
+                SUPABASE_URL, command_id
+            ))
+            .header("apikey", &self.anon_key)
+            .header("Authorization", format!("Bearer {}", self.anon_key))
             .header("Content-Type", "application/json")
             .json(&serde_json::json!({
                 "status": "completed",
@@ -167,91 +184,117 @@ impl SupabaseClient {
         Ok(())
     }
 
-    /// Get approved/blocked contacts for local cache
-    pub async fn get_contacts(&self, family_id: &str) -> Result<Vec<ContactInfo>> {
-        let resp = self.client
-            .get(&format!(
-                "{}/rest/v1/contacts?family_id=eq.{}&or=(is_approved.eq.true,is_blocked.eq.true)&select=contact_hash,platform,is_approved,is_blocked",
-                SUPABASE_URL, family_id
-            ))
-            .header("apikey", SUPABASE_ANON_KEY)
-            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
-            .send()
-            .await?;
+    // ============ Policies ============
 
-        let contacts: Vec<ContactInfo> = resp.json().await?;
-        Ok(contacts)
+    /// Get all policies for a child
+    pub async fn get_child_policies(&self, child_id: &str) -> Result<ChildPolicies> {
+        // Get screen time policy
+        let screen_time: Option<ScreenTimePolicy> = self.client
+            .get(&format!(
+                "{}/rest/v1/screen_time_policies?child_id=eq.{}&select=*",
+                SUPABASE_URL, child_id
+            ))
+            .header("apikey", &self.anon_key)
+            .header("Authorization", format!("Bearer {}", self.anon_key))
+            .send()
+            .await?
+            .json::<Vec<ScreenTimePolicy>>()
+            .await?
+            .into_iter()
+            .next();
+
+        // Get DNS policy
+        let dns_profile: Option<DnsPolicy> = self.client
+            .get(&format!(
+                "{}/rest/v1/dns_policies?child_id=eq.{}&select=*",
+                SUPABASE_URL, child_id
+            ))
+            .header("apikey", &self.anon_key)
+            .header("Authorization", format!("Bearer {}", self.anon_key))
+            .send()
+            .await?
+            .json::<Vec<DnsPolicy>>()
+            .await?
+            .into_iter()
+            .next();
+
+        // Get app policies
+        let app_policies: Vec<AppPolicy> = self.client
+            .get(&format!(
+                "{}/rest/v1/app_policies?child_id=eq.{}&select=*",
+                SUPABASE_URL, child_id
+            ))
+            .header("apikey", &self.anon_key)
+            .header("Authorization", format!("Bearer {}", self.anon_key))
+            .send()
+            .await?
+            .json()
+            .await
+            .unwrap_or_default();
+
+        Ok(ChildPolicies {
+            screen_time,
+            dns_profile,
+            app_policies,
+        })
     }
 
-    /// Send device heartbeat with system status
-    pub async fn send_heartbeat(&self, heartbeat: &DeviceHeartbeat) -> Result<()> {
+    // ============ Activity Logging ============
+
+    /// Log activity to Supabase
+    pub async fn log_activity(&self, device_id: &str, child_id: Option<&str>, activity_type: &str, data: serde_json::Value) -> Result<()> {
+        let payload = serde_json::json!({
+            "device_id": device_id,
+            "child_id": child_id,
+            "activity_type": activity_type,
+            "data": data,
+            "timestamp": Utc::now().to_rfc3339()
+        });
+
         self.client
-            .patch(&format!(
-                "{}/rest/v1/devices?id=eq.{}",
-                SUPABASE_URL, heartbeat.device_id
-            ))
-            .header("apikey", SUPABASE_ANON_KEY)
-            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+            .post(&format!("{}/rest/v1/activity_logs", SUPABASE_URL))
+            .header("apikey", &self.anon_key)
+            .header("Authorization", format!("Bearer {}", self.anon_key))
             .header("Content-Type", "application/json")
-            .json(&serde_json::json!({
-                "last_seen": Utc::now().to_rfc3339(),
-                "ip_address": heartbeat.ip_address,
-                "cpu_percent": heartbeat.cpu_percent,
-                "memory_percent": heartbeat.memory_percent,
-                "disk_percent": heartbeat.disk_percent,
-                "active_app": heartbeat.active_app,
-                "screen_locked": heartbeat.screen_locked
-            }))
+            .json(&payload)
             .send()
             .await?;
 
-        debug!("Heartbeat sent for device {}", heartbeat.device_id);
+        debug!("Activity logged: {}", activity_type);
         Ok(())
     }
 
-    /// Get pending commands for this device
-    pub async fn get_pending_commands(&self, device_id: &str) -> Result<Vec<PendingCommand>> {
-        let resp = self.client
-            .get(&format!(
-                "{}/rest/v1/device_commands?device_id=eq.{}&status=eq.pending&select=id,command,payload,created_at",
-                SUPABASE_URL, device_id
-            ))
-            .header("apikey", SUPABASE_ANON_KEY)
-            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
-            .send()
-            .await?;
-
-        if !resp.status().is_success() {
-            return Ok(vec![]);
-        }
-
-        let commands: Vec<PendingCommand> = resp.json().await.unwrap_or_default();
-        Ok(commands)
-    }
-
-    /// Acknowledge receipt of a command
-    pub async fn acknowledge_command(&self, command_id: &str) -> Result<()> {
+    /// Create an alert
+    pub async fn create_alert(&self, alert: &AlertCreate) -> Result<()> {
         self.client
-            .patch(&format!(
-                "{}/rest/v1/device_commands?id=eq.{}",
-                SUPABASE_URL, command_id
-            ))
-            .header("apikey", SUPABASE_ANON_KEY)
-            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+            .post(&format!("{}/rest/v1/alerts", SUPABASE_URL))
+            .header("apikey", &self.anon_key)
+            .header("Authorization", format!("Bearer {}", self.anon_key))
             .header("Content-Type", "application/json")
-            .json(&serde_json::json!({
-                "status": "acknowledged",
-                "acknowledged_at": Utc::now().to_rfc3339()
-            }))
+            .json(alert)
             .send()
             .await?;
 
-        debug!("Command {} acknowledged", command_id);
+        info!("Alert created: {} - {}", alert.trigger_type, alert.summary);
         Ok(())
     }
 }
 
-// ============ Request/Response Types ============
+impl Default for SupabaseClient {
+    fn default() -> Self {
+        Self::new(SUPABASE_ANON_KEY)
+    }
+}
+
+// Helper trait
+trait Pipe: Sized {
+    fn pipe<F, R>(self, f: F) -> R where F: FnOnce(Self) -> R {
+        f(self)
+    }
+}
+impl<T> Pipe for T {}
+
+// ============ Types ============
 
 #[derive(Debug, Serialize)]
 pub struct DeviceHeartbeat {
@@ -276,15 +319,7 @@ pub struct PendingCommand {
 pub struct DeviceRegistration {
     pub os_version: String,
     pub device_type: Option<String>,
-    pub hardware_info: Option<HardwareInfo>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct HardwareInfo {
-    pub cpu: Option<String>,
-    pub ram_gb: Option<u32>,
-    pub gpu: Option<String>,
-    pub hostname: Option<String>,
+    pub hardware_info: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -300,177 +335,63 @@ pub struct DeviceRegistrationResponse {
 pub struct DeviceStatusResponse {
     pub activated: bool,
     #[serde(default)]
-    pub device_code: Option<String>,
+    pub device_id: Option<String>,
     #[serde(default)]
-    pub message: Option<String>,
+    pub family_id: Option<String>,
     #[serde(default)]
-    pub device: Option<DeviceInfo>,
+    pub child_id: Option<String>,
     #[serde(default)]
-    pub family: Option<FamilyInfo>,
-    #[serde(default)]
-    pub children: Vec<ChildInfo>,
-    #[serde(default)]
-    pub assigned_child: Option<ChildInfo>,
-    #[serde(default)]
-    pub contacts: Vec<ContactInfo>,
-    #[serde(default)]
-    pub sync_endpoint: Option<String>,
+    pub child_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChildPolicies {
+    pub screen_time: Option<ScreenTimePolicy>,
+    pub dns_profile: Option<DnsPolicy>,
+    pub app_policies: Vec<AppPolicy>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct DeviceInfo {
+pub struct ScreenTimePolicy {
     pub id: String,
-    pub code: String,
-    pub name: Option<String>,
+    pub child_id: String,
+    pub enabled: Option<bool>,
+    pub weekday_limit_mins: Option<i32>,
+    pub weekend_limit_mins: Option<i32>,
+    pub bedtime_enabled: Option<bool>,
+    pub bedtime_start: Option<String>,
+    pub bedtime_end: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct FamilyInfo {
+pub struct DnsPolicy {
     pub id: String,
-    pub name: String,
+    pub child_id: String,
+    pub enabled: Option<bool>,
+    pub enforce_safe_search: Option<bool>,
+    pub blocked_categories: Option<Vec<String>>,
+    pub blocked_domains: Option<Vec<String>>,
+    pub allowed_domains: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct ChildInfo {
+pub struct AppPolicy {
     pub id: String,
-    pub name: String,
-    pub age_tier: String,
-    pub trust_score: Option<f64>,
-    #[serde(default)]
-    pub date_of_birth: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct ContactInfo {
-    pub contact_hash: String,
-    pub platform: String,
-    pub is_approved: bool,
-    pub is_blocked: bool,
-}
-
-// ============ Sync Payload Types ============
-
-#[derive(Debug, Serialize)]
-pub struct SyncPayload {
-    pub device_code: String,
-    pub os_version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub topic_summaries: Option<Vec<TopicSummarySync>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub browsing_summary: Option<BrowsingSummarySync>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub alerts: Option<Vec<AlertSync>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub contacts: Option<Vec<ContactSync>>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct TopicSummarySync {
     pub child_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub contact_hash: Option<String>,
-    pub period_start: String,
-    pub period_end: String,
-    pub topics: Vec<TopicEntry>,
-    pub message_count: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ai_summary: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub risk_events: Option<Vec<RiskEvent>>,
+    pub app_id: String,
+    pub app_name: String,
+    pub policy: Option<String>,
+    pub daily_limit_mins: Option<i32>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct TopicEntry {
-    pub topic: String,
-    pub percentage: f32,
-    pub description: String,
-    pub risk_level: String, // "safe", "caution", "high", "critical"
-}
-
-#[derive(Debug, Serialize)]
-pub struct RiskEvent {
-    pub timestamp: String,
-    pub event_type: String,
-    pub details: String,
-    pub severity: f32,
-}
-
-#[derive(Debug, Serialize)]
-pub struct BrowsingSummarySync {
+pub struct AlertCreate {
+    pub family_id: String,
     pub child_id: String,
-    pub date: String, // YYYY-MM-DD
-    pub top_domains: Vec<DomainEntry>,
-    pub categories: Vec<CategoryEntry>,
-    pub blocked_count: u32,
-    pub vpn_attempts: u32,
-    pub total_queries: u32,
-}
-
-#[derive(Debug, Serialize)]
-pub struct DomainEntry {
-    pub domain: String,
-    pub count: u32,
-    pub category: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CategoryEntry {
-    pub category: String,
-    pub percentage: f32,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AlertSync {
-    pub child_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub contact_hash: Option<String>,
-    pub alert_tier: String, // "digest", "note", "elevated", "high", "critical", "emergency"
+    pub alert_tier: String,
     pub trigger_type: String,
     pub risk_score: f32,
     pub summary: String,
     pub risk_factors: Vec<String>,
-    pub recommended_action: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub replay_available: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub replay_hours: Option<u32>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ContactSync {
-    pub contact_hash: String,
-    pub platform: String,
-    pub risk_score: f32,
-    pub inferred_tags: Vec<String>,
-    pub child_interactions: Vec<ChildInteraction>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ChildInteraction {
-    pub child_id: String,
-    pub message_count: u32,
-    pub child_risk_score: f32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SyncResponse {
-    pub success: bool,
-    pub results: SyncResults,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SyncResults {
-    pub topic_summaries: u32,
-    pub browsing_summary: bool,
-    pub alerts: u32,
-    pub contacts: u32,
-    #[serde(default)]
-    pub errors: Vec<String>,
-}
-
-impl Default for SupabaseClient {
-    fn default() -> Self {
-        Self::new()
-    }
+    pub recommended_action: Option<String>,
 }
